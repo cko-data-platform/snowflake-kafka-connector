@@ -197,56 +197,57 @@ public class StreamingUtils {
             .get(INGESTION_METHOD_OPT)
             .equalsIgnoreCase(IngestionMethodConfig.SNOWPIPE_STREAMING.toString())) {
 
-          // check if buffer thresholds are within permissible range
-          invalidParams.putAll(
-              BufferThreshold.validateBufferThreshold(
-                  inputConfig, IngestionMethodConfig.SNOWPIPE_STREAMING));
+            // check if buffer thresholds are within permissible range
+            invalidParams.putAll(
+                    BufferThreshold.validateBufferThreshold(
+                            inputConfig, IngestionMethodConfig.SNOWPIPE_STREAMING));
 
-          invalidParams.putAll(validateConfigConverters(KEY_CONVERTER_CONFIG_FIELD, inputConfig));
-          invalidParams.putAll(validateConfigConverters(VALUE_CONVERTER_CONFIG_FIELD, inputConfig));
+            invalidParams.putAll(validateConfigConverters(KEY_CONVERTER_CONFIG_FIELD, inputConfig));
+            invalidParams.putAll(validateConfigConverters(VALUE_CONVERTER_CONFIG_FIELD, inputConfig));
 
-          // Validate if snowflake role is present
-          if (!inputConfig.containsKey(Utils.SF_ROLE)
-              || Strings.isNullOrEmpty(inputConfig.get(Utils.SF_ROLE))) {
-            invalidParams.put(
-                Utils.SF_ROLE,
-                Utils.formatString(
-                    "Config:{} should be present if ingestionMethod is:{}",
-                    Utils.SF_ROLE,
-                    inputConfig.get(INGESTION_METHOD_OPT)));
-          }
-
-          /**
-           * Only checking in streaming since we are utilizing the values before we send it to
-           * DLQ/output to log file
-           */
-          if (inputConfig.containsKey(ERRORS_TOLERANCE_CONFIG)) {
-            SnowflakeSinkConnectorConfig.ErrorTolerance.VALIDATOR.ensureValid(
-                ERRORS_TOLERANCE_CONFIG, inputConfig.get(ERRORS_TOLERANCE_CONFIG));
-          }
-          if (inputConfig.containsKey(ERRORS_LOG_ENABLE_CONFIG)) {
-            BOOLEAN_VALIDATOR.ensureValid(
-                ERRORS_LOG_ENABLE_CONFIG, inputConfig.get(ERRORS_LOG_ENABLE_CONFIG));
-          }
-
-          if (inputConfig.containsKey(DEBUG_LOG_ENABLE_CONFIG)) {
-            BOOLEAN_VALIDATOR.ensureValid(
-                    DEBUG_LOG_ENABLE_CONFIG, inputConfig.get(DEBUG_LOG_ENABLE_CONFIG));
-          if (inputConfig.containsKey(SNOWPIPE_STREAMING_MAX_CLIENT_LAG)) {
-            try {
-              Long.parseLong(inputConfig.get(SNOWPIPE_STREAMING_MAX_CLIENT_LAG));
-            } catch (NumberFormatException exception) {
-              invalidParams.put(
-                  SNOWPIPE_STREAMING_MAX_CLIENT_LAG,
-                  Utils.formatString(
-                      "Max client lag configuration must be a parsable long. Given configuration"
-                          + " was: {}",
-                      inputConfig.get(SNOWPIPE_STREAMING_MAX_CLIENT_LAG)));
+            // Validate if snowflake role is present
+            if (!inputConfig.containsKey(Utils.SF_ROLE)
+                    || Strings.isNullOrEmpty(inputConfig.get(Utils.SF_ROLE))) {
+                invalidParams.put(
+                        Utils.SF_ROLE,
+                        Utils.formatString(
+                                "Config:{} should be present if ingestionMethod is:{}",
+                                Utils.SF_ROLE,
+                                inputConfig.get(INGESTION_METHOD_OPT)));
             }
-          }
 
-          // Valid schematization for Snowpipe Streaming
-          invalidParams.putAll(validateSchematizationConfig(inputConfig));
+            /**
+             * Only checking in streaming since we are utilizing the values before we send it to
+             * DLQ/output to log file
+             */
+            if (inputConfig.containsKey(ERRORS_TOLERANCE_CONFIG)) {
+                SnowflakeSinkConnectorConfig.ErrorTolerance.VALIDATOR.ensureValid(
+                        ERRORS_TOLERANCE_CONFIG, inputConfig.get(ERRORS_TOLERANCE_CONFIG));
+            }
+            if (inputConfig.containsKey(ERRORS_LOG_ENABLE_CONFIG)) {
+                BOOLEAN_VALIDATOR.ensureValid(
+                        ERRORS_LOG_ENABLE_CONFIG, inputConfig.get(ERRORS_LOG_ENABLE_CONFIG));
+            }
+
+            if (inputConfig.containsKey(DEBUG_LOG_ENABLE_CONFIG)) {
+                BOOLEAN_VALIDATOR.ensureValid(
+                        DEBUG_LOG_ENABLE_CONFIG, inputConfig.get(DEBUG_LOG_ENABLE_CONFIG));
+                if (inputConfig.containsKey(SNOWPIPE_STREAMING_MAX_CLIENT_LAG)) {
+                    try {
+                        Long.parseLong(inputConfig.get(SNOWPIPE_STREAMING_MAX_CLIENT_LAG));
+                    } catch (NumberFormatException exception) {
+                        invalidParams.put(
+                                SNOWPIPE_STREAMING_MAX_CLIENT_LAG,
+                                Utils.formatString(
+                                        "Max client lag configuration must be a parsable long. Given configuration"
+                                                + " was: {}",
+                                        inputConfig.get(SNOWPIPE_STREAMING_MAX_CLIENT_LAG)));
+                    }
+                }
+
+                // Valid schematization for Snowpipe Streaming
+                invalidParams.putAll(validateSchematizationConfig(inputConfig));
+            }
         }
       } catch (ConfigException exception) {
         invalidParams.put(

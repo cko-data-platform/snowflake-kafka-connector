@@ -383,6 +383,7 @@ public class RecordService {
         // will transform the value according to its type in the table
         streamingIngestRow.put(Utils.quoteNameIfNeeded(columnName), columnValue);
       }
+    }
       // Thrown an exception if the input JsonNode is not in the expected format
       if (streamingIngestRow.isEmpty()) {
         throw SnowflakeErrors.ERROR_0010.getException(
@@ -390,7 +391,6 @@ public class RecordService {
       }
       return streamingIngestRow;
     }
-  }
 
   private Map<String, Object> getMapFromJsonNodeForStreamingIngest(JsonNode node, String outerColumn, int depth) throws JsonProcessingException {
     final Map<String, Object> streamingIngestRow = new HashMap<>();
