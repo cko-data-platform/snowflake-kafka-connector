@@ -12,7 +12,6 @@
 
     <groupId>com.snowflake</groupId>
     <artifactId>snowflake-kafka-connector</artifactId>
-    <version>1.8.4-CKO</version>
     <version>2.1.2-CKO</version>
     <packaging>jar</packaging>
     <name>Snowflake Kafka Connector</name>
