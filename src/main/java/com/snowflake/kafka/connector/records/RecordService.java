@@ -343,7 +343,7 @@ public class RecordService {
 
     // return empty if tombstone record
     if (node.size() == 0
-        && this.behaviorOnNullValues == SnowflakeSinkConnectorConfig.BehaviorOnNullValues.DEFAULT) {
+            && this.behaviorOnNullValues == SnowflakeSinkConnectorConfig.BehaviorOnNullValues.DEFAULT) {
       return streamingIngestRow;
     }
 
@@ -365,33 +365,34 @@ public class RecordService {
         continue;
       } else if (columnNode.isTextual()) {
 
-      if (columnNode.isTextual()) {
-        columnValue = columnNode.textValue();
-        try {
-          if (MAPPER.readTree(columnNode.textValue()).isObject() && !this.nestColExcl.contains(columnName)) {
-            streamingIngestRow.putAll(this.getMapFromJsonNodeForStreamingIngest(MAPPER.readTree(columnNode.textValue()), sflColumnName, depth+1));
-            continue;
+        if (columnNode.isTextual()) {
+          columnValue = columnNode.textValue();
+          try {
+            if (MAPPER.readTree(columnNode.textValue()).isObject() && !this.nestColExcl.contains(columnName)) {
+              streamingIngestRow.putAll(this.getMapFromJsonNodeForStreamingIngest(MAPPER.readTree(columnNode.textValue()), sflColumnName, depth + 1));
+              continue;
+            }
+          } catch (JsonProcessingException ignored) {
           }
-        } catch(JsonProcessingException ignored) {}
-      } else if (columnNode.isNull()) {
-        columnValue = null;
-      } else {
-        columnValue = MAPPER.writeValueAsString(columnNode);
+        } else if (columnNode.isNull()) {
+          columnValue = null;
+        } else {
+          columnValue = MAPPER.writeValueAsString(columnNode);
+        }
+        // while the value is always dumped into a string, the Streaming Ingest SDK
+        // will transform the value according to its type in the table
+        streamingIngestRow.put(Utils.quoteNameIfNeeded(columnName), columnValue);
       }
-      // while the value is always dumped into a string, the Streaming Ingest SDK
-      // will transform the value according to its type in the table
-      streamingIngestRow.put(Utils.quoteNameIfNeeded(columnName), columnValue);
+      // Thrown an exception if the input JsonNode is not in the expected format
+      if (streamingIngestRow.isEmpty()) {
+        throw SnowflakeErrors.ERROR_0010.getException(
+                "Not able to convert node to Snowpipe Streaming input format");
+      }
+      return streamingIngestRow;
     }
-    // Thrown an exception if the input JsonNode is not in the expected format
-    if (streamingIngestRow.isEmpty()) {
-      throw SnowflakeErrors.ERROR_0010.getException(
-          "Not able to convert node to Snowpipe Streaming input format");
-    }
-    return streamingIngestRow;
   }
 
-  private Map<String, Object> getMapFromJsonNodeForStreamingIngest(JsonNode node, String outerColumn, int depth)
-          throws JsonProcessingException {
+  private Map<String, Object> getMapFromJsonNodeForStreamingIngest(JsonNode node, String outerColumn, int depth) throws JsonProcessingException {
     final Map<String, Object> streamingIngestRow = new HashMap<>();
     Iterator<String> columnNames = node.fieldNames();
     while (columnNames.hasNext()) {
