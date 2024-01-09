@@ -339,7 +339,7 @@ public class RecordService {
   private Map<String, Object> getMapFromJsonNodeForStreamingIngest(JsonNode node)
       throws JsonProcessingException {
     final Map<String, Object> streamingIngestRow = new HashMap<>();
-    int depth = 1;
+    int depth = 0;
     Iterator<String> columnNames = node.fieldNames();
     while (columnNames.hasNext()) {
       String columnName = columnNames.next();
