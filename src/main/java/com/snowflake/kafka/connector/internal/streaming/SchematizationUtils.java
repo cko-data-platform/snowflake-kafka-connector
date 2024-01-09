@@ -154,7 +154,7 @@ public class SchematizationUtils {
     while (fields.hasNext()) {
       Map.Entry<String, JsonNode> field = fields.next();
       String colName = Utils.quoteNameIfNeeded(field.getKey());
-      if (columnNamesSet.contains(field.getKey())) {
+      if (columnNamesSet.contains(Utils.quoteNameIfNeeded(field.getKey()))) {
         String type;
         if (schemaMap.isEmpty()) {
           // No schema associated with the record, we will try to infer it based on the data

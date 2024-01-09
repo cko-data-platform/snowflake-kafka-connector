@@ -94,7 +94,7 @@ public class SchematizationUtilsTest {
 
     Map<String, String> columnToTypes =
             SchematizationUtils.getColumnTypes(
-                    recordWithoutSchema, Arrays.asList(columnName1, columnName2));
+                    recordWithoutSchema, Arrays.asList(columnName1, columnName2), false);
     Assert.assertEquals("VARCHAR", columnToTypes.get(columnName1));
     Assert.assertEquals("VARCHAR", columnToTypes.get(columnName2));
   }
@@ -160,7 +160,7 @@ public class SchematizationUtilsTest {
       recordWithoutSchema =
               new SinkRecord(
                       "topic", 0, Schema.STRING_SCHEMA, "string", null, processedRecordForStreamingIngest, 0);
-      Map<String, String> columnToTypes = SchematizationUtils.getColumnTypes(recordWithoutSchema, Collections.singletonList("PAYLOAD_DETAIL"));
+      Map<String, String> columnToTypes = SchematizationUtils.getColumnTypes(recordWithoutSchema, Collections.singletonList(Utils.quoteNameIfNeeded("PAYLOAD_DETAIL")));
       assert Objects.equals(columnToTypes.get("\"PAYLOAD_DETAIL\""), "VARIANT");
     } catch (JsonProcessingException e) {
       throw new RuntimeException(e);
