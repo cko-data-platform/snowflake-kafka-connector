@@ -25,14 +25,7 @@ import com.snowflake.kafka.connector.internal.telemetry.SnowflakeTelemetryServic
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.logging.Logger;
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.core.JsonProcessingException;
@@ -415,7 +408,7 @@ public class RecordService {
       }
       // while the value is always dumped into a string, the Streaming Ingest SDK
       // will transform the value according to its type in the table
-      streamingIngestRow.put(sflColumnName, columnValue);
+      streamingIngestRow.put(Utils.quoteNameIfNeeded(sflColumnName), columnValue);
     }
 
     //        If we're dealing with nesting, we actually don't mind skipping here as we've seen cases of:

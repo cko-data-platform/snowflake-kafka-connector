@@ -15,6 +15,7 @@ import static org.apache.kafka.connect.data.Schema.Type.INT64;
 import static org.apache.kafka.connect.data.Schema.Type.STRING;
 import static org.apache.kafka.connect.data.Schema.Type.STRUCT;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.snowflake.kafka.connector.Utils;
 import com.snowflake.kafka.connector.internal.SnowflakeConnectionService;
 import com.snowflake.kafka.connector.internal.SnowflakeErrors;
@@ -148,13 +149,19 @@ public class SchematizationUtils {
     return parseColumnTypes(recordNode, columnNamesSet, schemaMap);
   }
 
+  public static Map<String, String> parseColumnTypesTest(JsonNode recordNode, Set<String> columnNamesSet, Map<String, String> schemaMap) {
+    return parseColumnTypes(recordNode, columnNamesSet, schemaMap);
+  }
+
+  @VisibleForTesting
   private static Map<String, String> parseColumnTypes(JsonNode recordNode, Set<String> columnNamesSet, Map<String, String> schemaMap) {
     Map<String, String> columnToType = new HashMap<>();
     Iterator<Map.Entry<String, JsonNode>> fields = recordNode.fields();
     while (fields.hasNext()) {
       Map.Entry<String, JsonNode> field = fields.next();
       String colName = Utils.quoteNameIfNeeded(field.getKey());
-      if (columnNamesSet.contains(field.getKey())) {
+
+      if (columnNamesSet.contains(colName)) {
         String type;
         if (schemaMap.isEmpty()) {
           // No schema associated with the record, we will try to infer it based on the data
