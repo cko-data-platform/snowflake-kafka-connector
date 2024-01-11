@@ -627,7 +627,7 @@ public class TopicPartitionChannel {
     return Failsafe.with(reopenChannelFallbackExecutorForInsertRows)
         .get(
             new InsertRowsApiResponseSupplier(
-                this.channel, buffer, this.enableSchemaEvolution, this.conn, this.nestDepth > 1, nestColExcl));
+                this.channel, buffer, this.enableSchemaEvolution, this.conn, this.nestDepth > 0, nestColExcl));
   }
 
   /** Invokes the API given the channel and streaming Buffer. */
