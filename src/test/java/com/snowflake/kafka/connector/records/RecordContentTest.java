@@ -404,6 +404,7 @@ public class RecordContentTest {
 
         assert got.get(Utils.quoteNameIfNeeded("NAME")).equals("sf");
         assert got.get(Utils.quoteNameIfNeeded("ANSWER")).equals("42");
+        assert got.get(Utils.quoteNameIfNeeded("KAFKA_OFFSET")).equals("0");
     }
 
     @Test

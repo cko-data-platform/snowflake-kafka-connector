@@ -627,7 +627,7 @@ public class TopicPartitionChannel {
     return Failsafe.with(reopenChannelFallbackExecutorForInsertRows)
         .get(
             new InsertRowsApiResponseSupplier(
-                this.channel, buffer, this.enableSchemaEvolution, this.conn, this.nestDepth > 0, nestColExcl));
+                this.channel, buffer, this.enableSchemaEvolution, this.conn, this.nestDepth, nestColExcl));
   }
 
   /** Invokes the API given the channel and streaming Buffer. */
@@ -643,10 +643,10 @@ public class TopicPartitionChannel {
     // Whether the schema evolution is enabled
     private final boolean enableSchemaEvolution;
 
-    private final boolean enableNesting;
-
     // Connection service which will be used to do the ALTER TABLE command for schema evolution
     private final SnowflakeConnectionService conn;
+
+    private final int nestDepth;
     private final List<String> nestColExcl;
 
     private InsertRowsApiResponseSupplier(
@@ -654,12 +654,12 @@ public class TopicPartitionChannel {
             StreamingBuffer insertRowsStreamingBuffer,
             boolean enableSchemaEvolution,
             SnowflakeConnectionService conn,
-            boolean enableNesting, List<String> nestColExcl) {
+            int nestDepth, List<String> nestColExcl) {
       this.channel = channelForInsertRows;
       this.insertRowsStreamingBuffer = insertRowsStreamingBuffer;
       this.enableSchemaEvolution = enableSchemaEvolution;
       this.conn = conn;
-      this.enableNesting = enableNesting;
+      this.nestDepth = nestDepth;
       this.nestColExcl = nestColExcl;
     }
 
@@ -708,7 +708,7 @@ public class TopicPartitionChannel {
             } else {
               boolean changesApplied;
 
-              if (this.enableNesting) {
+              if (this.nestDepth > 1) {
                 SinkRecord unflattenedRec = this.insertRowsStreamingBuffer.getSinkRecord(originalSinkRecordIdx);
                 changesApplied = SchematizationUtils.evolveSchemaIfNeeded(
                         this.conn,
@@ -717,6 +717,16 @@ public class TopicPartitionChannel {
                         extraColNames,
                         new SinkRecord(unflattenedRec.topic(), unflattenedRec.kafkaPartition(), unflattenedRec.keySchema(), unflattenedRec.key(), unflattenedRec.valueSchema(), records.get(idx), unflattenedRec.kafkaOffset(),
                                 unflattenedRec.timestamp(), unflattenedRec.timestampType()));
+              } else if (this.nestDepth == 1) {
+                // covers the case where nestDepth = 1, so we don't want to flatten further
+                SinkRecord unflattenedRec = this.insertRowsStreamingBuffer.getSinkRecord(originalSinkRecordIdx);
+                changesApplied = SchematizationUtils.evolveSchemaIfNeeded(
+                        this.conn,
+                        this.channel.getTableName(),
+                        nonNullableColumns,
+                        extraColNames,
+                        new SinkRecord(unflattenedRec.topic(), unflattenedRec.kafkaPartition(), unflattenedRec.keySchema(), unflattenedRec.key(), unflattenedRec.valueSchema(), unflattenedRec, unflattenedRec.kafkaOffset(),
+                                unflattenedRec.timestamp(), unflattenedRec.timestampType()));
               } else {
                 changesApplied = SchematizationUtils.evolveSchemaIfNeeded(
                         this.conn,
@@ -724,7 +734,7 @@ public class TopicPartitionChannel {
                         nonNullableColumns,
                         extraColNames,
                         this.insertRowsStreamingBuffer.getSinkRecord(originalSinkRecordIdx)
-                        );
+                );
               }
 //                Run through the records until we apply changes
 //                This is needed for cases where we're finding new cols
