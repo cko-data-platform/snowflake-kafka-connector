@@ -726,7 +726,7 @@ public class TopicPartitionChannel {
                         this.channel.getTableName(),
                         nonNullableColumns,
                         extraColNames,
-                        new SinkRecord(unflattenedRec.topic(), unflattenedRec.kafkaPartition(), unflattenedRec.keySchema(), unflattenedRec.key(), unflattenedRec.valueSchema(), unflattenedRec.get(idx), unflattenedRec.kafkaOffset(),
+                        new SinkRecord(unflattenedRec.topic(), unflattenedRec.kafkaPartition(), unflattenedRec.keySchema(), unflattenedRec.key(), unflattenedRec.valueSchema(), records.get(idx), unflattenedRec.kafkaOffset(),
                                 unflattenedRec.timestamp(), unflattenedRec.timestampType()));
               }
 //                Run through the records until we apply changes
