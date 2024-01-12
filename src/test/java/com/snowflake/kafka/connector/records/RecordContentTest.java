@@ -1,6 +1,7 @@
 package com.snowflake.kafka.connector.records;
 
 import com.snowflake.kafka.connector.SnowflakeSinkConnectorConfig;
+import com.snowflake.kafka.connector.Utils;
 import com.snowflake.kafka.connector.internal.SnowflakeErrors;
 import com.snowflake.kafka.connector.internal.SnowflakeKafkaConnectorException;
 import com.snowflake.kafka.connector.internal.TestUtils;
@@ -275,7 +276,6 @@ public class RecordContentTest {
                 new SinkRecord(
                         topic, partition, Schema.STRING_SCHEMA, "string", sv.schema(), sv.value(), partition);
         Map<String, Object> got = service.getProcessedRecordForStreamingIngest(record);
-
     assert got.containsKey("\"NaMe\"");
     assert got.containsKey("\"ANSWER\"");
   }
@@ -374,8 +374,37 @@ public class RecordContentTest {
         // json string should not be enclosed in additional brackets
         // a non-double-quoted column name will be transformed into uppercase
 
-        assert got.get("outer_struct_name").equals("sf");
-        assert got.get("outer_struct_answer").equals("42");
+        System.out.println(got);
+
+        assert got.get(Utils.quoteNameIfNeeded("OUTER_STRUCT_NAME")).equals("sf");
+        assert got.get(Utils.quoteNameIfNeeded("OUTER_STRUCT_ANSWER")).equals("42");
+    }
+
+    @Test
+    public void testSchematizationNestedStringFieldLevelOne() throws JsonProcessingException {
+        RecordService service = new RecordService();
+        SnowflakeJsonConverter jsonConverter = new SnowflakeJsonConverter();
+
+        service.setEnableSchematization(true);
+        service.setNestDepth(1);
+        String value = "{\"name\":\"sf\",\"answer\":42}";
+        byte[] valueContents = (value).getBytes(StandardCharsets.UTF_8);
+        SchemaAndValue sv = jsonConverter.toConnectData(topic, valueContents);
+
+        SinkRecord record =
+                new SinkRecord(
+                        topic, partition, Schema.STRING_SCHEMA, "string", sv.schema(), sv.value(), partition);
+
+        Map<String, Object> got = service.getProcessedRecordForStreamingIngest(record);
+        // each field should be dumped into string format
+        // json string should not be enclosed in additional brackets
+        // a non-double-quoted column name will be transformed into uppercase
+
+        System.out.println(got);
+
+        assert got.get(Utils.quoteNameIfNeeded("NAME")).equals("sf");
+        assert got.get(Utils.quoteNameIfNeeded("ANSWER")).equals("42");
+        assert got.get(Utils.quoteNameIfNeeded("KAFKA_OFFSET")).equals("0");
     }
 
     @Test
@@ -398,8 +427,8 @@ public class RecordContentTest {
         // json string should not be enclosed in additional brackets
         // a non-double-quoted column name will be transformed into uppercase
 
-        assert got.get("outer_2_struct_outer_struct_name").equals("sf");
-        assert got.get("outer_2_struct_outer_struct_answer").equals("42");
+        assert got.get(Utils.quoteNameIfNeeded("OUTER_2_STRUCT_OUTER_STRUCT_NAME")).equals("sf");
+        assert got.get(Utils.quoteNameIfNeeded("OUTER_2_STRUCT_OUTER_STRUCT_ANSWER")).equals("42");
     }
 
     @Test
@@ -422,9 +451,11 @@ public class RecordContentTest {
         // each field should be dumped into string format
         // json string should not be enclosed in additional brackets
         // a non-double-quoted column name will be transformed into uppercase
-        assert got.get("outer_struct_name").equals("sf");
-        assert got.get("outer_struct_answer").equals("42");
-        assert got.get("json_string_partitionkey_s").equals("MT942_BankStatement_2023013009063451.pgp");
+
+        System.out.println(got);
+        assert got.get(Utils.quoteNameIfNeeded("OUTER_STRUCT_NAME")).equals("sf");
+        assert got.get(Utils.quoteNameIfNeeded("OUTER_STRUCT_ANSWER")).equals("42");
+        assert got.get(Utils.quoteNameIfNeeded("JSON_STRING_PARTITIONKEY_S")).equals("MT942_BankStatement_2023013009063451.pgp");
     }
 
 
@@ -450,9 +481,9 @@ public class RecordContentTest {
         // json string should not be enclosed in additional brackets
         // a non-double-quoted column name will be transformed into uppercase
 
-        assert got.get("outer_struct_name").equals("sf");
-        assert got.containsKey("outer_struct_answer");
-        assert got.containsKey("outer_struct_exclme");
+        assert got.get(Utils.quoteNameIfNeeded("OUTER_STRUCT_NAME")).equals("sf");
+        assert got.containsKey(Utils.quoteNameIfNeeded("OUTER_STRUCT_ANSWER"));
+        assert got.containsKey(Utils.quoteNameIfNeeded("OUTER_STRUCT_EXCLME"));
     }
 
     @Test
@@ -476,8 +507,8 @@ public class RecordContentTest {
         // json string should not be enclosed in additional brackets
         // a non-double-quoted column name will be transformed into uppercase
 
-        assert got.get("outer_2_struct_outer_struct_name").equals("sf");
-        assert got.get("outer_2_struct_outer_struct_answer").equals("42");
-        assert got.get("outer_2_struct_outer_struct_exclme").equals("{\"test\":1}");
+        assert got.get(Utils.quoteNameIfNeeded("OUTER_2_STRUCT_OUTER_STRUCT_NAME")).equals("sf");
+        assert got.get(Utils.quoteNameIfNeeded("OUTER_2_STRUCT_OUTER_STRUCT_ANSWER")).equals("42");
+        assert got.get(Utils.quoteNameIfNeeded("OUTER_2_STRUCT_OUTER_STRUCT_EXCLME")).equals("{\"test\":1}");
     }
 }

@@ -5,11 +5,11 @@ import com.snowflake.kafka.connector.internal.TestUtils;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-import com.snowflake.kafka.connector.records.RecordService;
-import com.snowflake.kafka.connector.records.SnowflakeJsonConverter;
-import com.snowflake.kafka.connector.records.SnowflakeJsonSchema;
+import com.snowflake.kafka.connector.records.*;
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.core.JsonProcessingException;
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.JsonNode;
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper;
+import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaAndValue;

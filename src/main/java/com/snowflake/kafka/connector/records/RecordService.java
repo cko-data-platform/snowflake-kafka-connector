@@ -25,14 +25,7 @@ import com.snowflake.kafka.connector.internal.telemetry.SnowflakeTelemetryServic
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.logging.Logger;
 
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.core.JsonProcessingException;
@@ -320,14 +313,14 @@ public class RecordService {
         streamingIngestRow.putAll(getMapFromJsonNodeForStreamingIngest(node));
       }
 
-      streamingIngestRow.put(TABLE_COLUMN_CONTENT, MAPPER.writeValueAsString(node));
+      streamingIngestRow.put(Utils.quoteNameIfNeeded(TABLE_COLUMN_CONTENT), MAPPER.writeValueAsString(node));
 
       if (metadataConfig.allFlag) {
-        streamingIngestRow.put(TABLE_COLUMN_METADATA, MAPPER.writeValueAsString(row.metadata));
+        streamingIngestRow.put(Utils.quoteNameIfNeeded(TABLE_COLUMN_METADATA), MAPPER.writeValueAsString(row.metadata));
       }
 
-      streamingIngestRow.put(TABLE_COLUMN_KAFKA_TIMESTAMP, MAPPER.writeValueAsString(new java.sql.Timestamp(System.currentTimeMillis())));
-      streamingIngestRow.put(TABLE_COLUMN_OFFSET, MAPPER.writeValueAsString((record.kafkaOffset())));
+      streamingIngestRow.put(Utils.quoteNameIfNeeded(TABLE_COLUMN_KAFKA_TIMESTAMP), MAPPER.writeValueAsString(new java.sql.Timestamp(System.currentTimeMillis())));
+      streamingIngestRow.put(Utils.quoteNameIfNeeded(TABLE_COLUMN_OFFSET), MAPPER.writeValueAsString((record.kafkaOffset())));
     }
     if (this.debugLog) {
       LOGGER.info("CAFLOG_DEBUGLOG_ROW - {} ~~~ {} ~~~ {} ~~~ {}", streamingIngestRow.toString(), record, record.kafkaOffset(), record.toString());
@@ -359,7 +352,7 @@ public class RecordService {
       } else if (columnNode.isTextual()) {
         columnValue = columnNode.textValue();
         try {
-          if (MAPPER.readTree(columnNode.textValue()).isObject() && !this.nestColExcl.contains(columnName)) {
+          if (MAPPER.readTree(columnNode.textValue()).isObject() && this.nestDepth > depth && !this.nestColExcl.contains(columnName)) {
             streamingIngestRow.putAll(this.getMapFromJsonNodeForStreamingIngest(MAPPER.readTree(columnNode.textValue()), sflColumnName, depth+1));
             continue;
           }
@@ -403,7 +396,7 @@ public class RecordService {
       } else if (columnNode.isTextual()) {
         columnValue = columnNode.textValue();
         try {
-          if (MAPPER.readTree(columnNode.textValue()).isObject() && !this.nestColExcl.contains(columnName)) {
+          if (MAPPER.readTree(columnNode.textValue()).isObject() && this.nestDepth > depth && !this.nestColExcl.contains(columnName)) {
             streamingIngestRow.putAll(this.getMapFromJsonNodeForStreamingIngest(MAPPER.readTree(columnNode.textValue()), sflColumnName, depth+1));
             continue;
           }
@@ -415,7 +408,7 @@ public class RecordService {
       }
       // while the value is always dumped into a string, the Streaming Ingest SDK
       // will transform the value according to its type in the table
-      streamingIngestRow.put(sflColumnName, columnValue);
+      streamingIngestRow.put(Utils.quoteNameIfNeeded(sflColumnName), columnValue);
     }
 
     //        If we're dealing with nesting, we actually don't mind skipping here as we've seen cases of:
