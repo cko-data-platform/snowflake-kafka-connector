@@ -15,7 +15,6 @@ import static org.apache.kafka.connect.data.Schema.Type.INT64;
 import static org.apache.kafka.connect.data.Schema.Type.STRING;
 import static org.apache.kafka.connect.data.Schema.Type.STRUCT;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.snowflake.kafka.connector.Utils;
 import com.snowflake.kafka.connector.internal.SnowflakeConnectionService;
 import com.snowflake.kafka.connector.internal.SnowflakeErrors;
@@ -149,11 +148,6 @@ public class SchematizationUtils {
     return parseColumnTypes(recordNode, columnNamesSet, schemaMap);
   }
 
-  public static Map<String, String> parseColumnTypesTest(JsonNode recordNode, Set<String> columnNamesSet, Map<String, String> schemaMap) {
-    return parseColumnTypes(recordNode, columnNamesSet, schemaMap);
-  }
-
-  @VisibleForTesting
   private static Map<String, String> parseColumnTypes(JsonNode recordNode, Set<String> columnNamesSet, Map<String, String> schemaMap) {
     Map<String, String> columnToType = new HashMap<>();
     Iterator<Map.Entry<String, JsonNode>> fields = recordNode.fields();

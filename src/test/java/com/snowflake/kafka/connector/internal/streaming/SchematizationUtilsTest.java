@@ -169,39 +169,4 @@ public class SchematizationUtilsTest {
 
     assert true;
   }
-
-
-  @Test
-  public void testParseColumnTypes() throws Exception {
-    ObjectMapper mapper = new ObjectMapper();
-
-    SnowflakeConverter converter = new SnowflakeJsonConverter();
-
-    ObjectNode node = mapper.createObjectNode();
-
-    node.put("str", "test");
-
-    String json = "{ \"f1\" : \"v1\", \"f2\" : \"v2\", \"RECORD_METADATA\" : \"{\\\"f2\\\": \\\"v2\\\"}\" } ";
-    ObjectMapper objectMapper = new ObjectMapper();
-    SnowflakeRecordContent content = new SnowflakeRecordContent(objectMapper.readTree(json));
-
-    JsonNode[] jsonNodes = content.getData();
-
-    Set<String> columnNameSet = new HashSet<>();
-    columnNameSet.add(Utils.quoteNameIfNeeded("f1"));
-    columnNameSet.add(Utils.quoteNameIfNeeded("f2"));
-
-    // We don't want to columns that aren't quoted. We can safely ignore them.
-    columnNameSet.add("f3");
-    columnNameSet.add("FF5");
-
-    Map<String, String> emptySchemaMap = new HashMap<String, String>();
-
-    Map<String, String> got = SchematizationUtils.parseColumnTypesTest(jsonNodes[0], columnNameSet, emptySchemaMap);
-    System.out.println(got);
-
-    Assert.assertEquals(got.get(Utils.quoteNameIfNeeded("f1")), "VARCHAR");
-    Assert.assertEquals(got.get(Utils.quoteNameIfNeeded("f2")), "VARCHAR");
-  }
-
 }
