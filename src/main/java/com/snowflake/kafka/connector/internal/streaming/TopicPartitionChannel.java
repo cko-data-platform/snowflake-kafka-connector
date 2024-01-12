@@ -690,6 +690,7 @@ public class TopicPartitionChannel {
           InsertValidationResponse response =
               this.channel.insertRow(records.get(idx), Long.toString(offsets.get(idx)));
           if (response.hasErrors()) {
+            LOGGER.info("MJCLOG2 Tried to insert {} ||| {}  but failed", records.get(idx), idx);
             LOGGER.info("[INSERT-ERROR] {}", response.getInsertErrors().get(0).getMessage());
             InsertValidationResponse.InsertError insertError = response.getInsertErrors().get(0);
             List<String> extraColNames = insertError.getExtraColNames();
@@ -717,7 +718,7 @@ public class TopicPartitionChannel {
                         extraColNames,
                         new SinkRecord(unflattenedRec.topic(), unflattenedRec.kafkaPartition(), unflattenedRec.keySchema(), unflattenedRec.key(), unflattenedRec.valueSchema(), records.get(idx), unflattenedRec.kafkaOffset(),
                                 unflattenedRec.timestamp(), unflattenedRec.timestampType()));
-              } else if (this.nestDepth == 1) {
+              } else {
                 // covers the case where nestDepth = 1, so we don't want to flatten further
                 SinkRecord unflattenedRec = this.insertRowsStreamingBuffer.getSinkRecord(originalSinkRecordIdx);
                 changesApplied = SchematizationUtils.evolveSchemaIfNeeded(
@@ -727,14 +728,6 @@ public class TopicPartitionChannel {
                         extraColNames,
                         new SinkRecord(unflattenedRec.topic(), unflattenedRec.kafkaPartition(), unflattenedRec.keySchema(), unflattenedRec.key(), unflattenedRec.valueSchema(), unflattenedRec.value(), unflattenedRec.kafkaOffset(),
                                 unflattenedRec.timestamp(), unflattenedRec.timestampType()));
-              } else {
-                changesApplied = SchematizationUtils.evolveSchemaIfNeeded(
-                        this.conn,
-                        this.channel.getTableName(),
-                        nonNullableColumns,
-                        extraColNames,
-                        this.insertRowsStreamingBuffer.getSinkRecord(originalSinkRecordIdx)
-                );
               }
 //                Run through the records until we apply changes
 //                This is needed for cases where we're finding new cols
