@@ -705,6 +705,8 @@ public class TopicPartitionChannel {
               finalResponse.addError(insertError);
             } else {
               boolean changesApplied;
+              // Instead of using the first row in buffer to calculate whether to evolve the schema, we use the current record.
+              // This allows us to move through the buffer until we've resolved all conflicts with the Snowflake table schema and recordSchema.
               SinkRecord unflattenedRec = this.insertRowsStreamingBuffer.getSinkRecord(originalSinkRecordIdx);
               changesApplied = SchematizationUtils.evolveSchemaIfNeeded(
                         this.conn,
