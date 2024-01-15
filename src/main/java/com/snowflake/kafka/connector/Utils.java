@@ -437,12 +437,12 @@ public class Utils {
                 "Schematization is only available with {}.",
                 IngestionMethodConfig.SNOWPIPE_STREAMING.toString()));
       }
-      if (config.containsKey(SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_FILE_VERSION)) {
+      if (config.containsKey(SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_MAX_CLIENT_LAG)) {
         invalidConfigParams.put(
-            SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_FILE_VERSION,
+            SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_MAX_CLIENT_LAG,
             Utils.formatString(
                 "{} is only available with ingestion type: {}.",
-                SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_FILE_VERSION,
+                SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_MAX_CLIENT_LAG,
                 IngestionMethodConfig.SNOWPIPE_STREAMING.toString()));
       }
       if (config.containsKey(
@@ -454,6 +454,14 @@ public class Utils {
             SnowflakeSinkConnectorConfig.ENABLE_STREAMING_CLIENT_OPTIMIZATION_CONFIG,
             Utils.formatString(
                 "Streaming client optimization is only available with {}.",
+                IngestionMethodConfig.SNOWPIPE_STREAMING.toString()));
+      }
+      if (config.containsKey(
+          SnowflakeSinkConnectorConfig.ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_CONFIG)) {
+        invalidConfigParams.put(
+            SnowflakeSinkConnectorConfig.ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_CONFIG,
+            Utils.formatString(
+                "Streaming client Channel migration is only available with {}.",
                 IngestionMethodConfig.SNOWPIPE_STREAMING.toString()));
       }
     }
