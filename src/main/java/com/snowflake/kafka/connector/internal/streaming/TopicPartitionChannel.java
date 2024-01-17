@@ -647,7 +647,7 @@ public class TopicPartitionChannel {
     private final SnowflakeConnectionService conn;
 
     private final boolean enableNesting;
-    
+
     private final List<String> nestColExcl;
 
     private InsertRowsApiResponseSupplier(
@@ -825,8 +825,8 @@ public class TopicPartitionChannel {
               try {
                   HashMap<String, ?> rowContent = (HashMap<String, ?>) insertError.getRowContent();
                   // TODO: take out this hack
-                  if (rowContent.getOrDefault("RECORD_METADATA", null) != null) {
-                    HashMap<String, Object> metadata = new ObjectMapper().readValue((String) rowContent.get("RECORD_METADATA"), HashMap.class);
+                  if (rowContent.getOrDefault(Utils.quoteNameIfNeeded("RECORD_METADATA"), null) != null) {
+                    HashMap<String, Object> metadata = new ObjectMapper().readValue((String) rowContent.get(Utils.quoteNameIfNeeded("RECORD_METADATA")), HashMap.class);
                     List<SinkRecord> res = insertedRecordsToBuffer.stream().filter((rec) -> ((Long) rec.kafkaOffset()).longValue() == ((Number) metadata.get("offset")).longValue()).collect(Collectors.toList());
                     this.kafkaRecordErrorReporter.reportError(res.get(0), insertError.getException());
                   }
