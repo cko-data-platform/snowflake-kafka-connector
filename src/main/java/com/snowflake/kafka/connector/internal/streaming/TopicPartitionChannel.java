@@ -828,6 +828,7 @@ public class TopicPartitionChannel {
                   if (rowContent.getOrDefault(Utils.quoteNameIfNeeded("RECORD_METADATA"), null) != null) {
                     HashMap<String, Object> metadata = new ObjectMapper().readValue((String) rowContent.get(Utils.quoteNameIfNeeded("RECORD_METADATA")), HashMap.class);
                     List<SinkRecord> res = insertedRecordsToBuffer.stream().filter((rec) -> ((Long) rec.kafkaOffset()).longValue() == ((Number) metadata.get("offset")).longValue()).collect(Collectors.toList());
+                    LOGGER.info("MJCLOG2 Running handleInsertRowsFailures with metadata {} and res.get(0) {} and insertError {}", metadata, res.get(0), insertError.getException());
                     this.kafkaRecordErrorReporter.reportError(res.get(0), insertError.getException());
                   }
               } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
