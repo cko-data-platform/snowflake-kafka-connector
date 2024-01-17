@@ -627,7 +627,7 @@ public class TopicPartitionChannel {
     return Failsafe.with(reopenChannelFallbackExecutorForInsertRows)
         .get(
             new InsertRowsApiResponseSupplier(
-                this.channel, buffer, this.enableSchemaEvolution, this.conn, nestColExcl));
+                this.channel, buffer, this.enableSchemaEvolution, this.conn, this.nestDepth >= 0, nestColExcl));
   }
 
   /** Invokes the API given the channel and streaming Buffer. */
@@ -645,6 +645,9 @@ public class TopicPartitionChannel {
 
     // Connection service which will be used to do the ALTER TABLE command for schema evolution
     private final SnowflakeConnectionService conn;
+
+    private final boolean enableNesting;
+
     private final List<String> nestColExcl;
 
     private InsertRowsApiResponseSupplier(
@@ -652,11 +655,13 @@ public class TopicPartitionChannel {
             StreamingBuffer insertRowsStreamingBuffer,
             boolean enableSchemaEvolution,
             SnowflakeConnectionService conn,
+            boolean enableNesting,
             List<String> nestColExcl) {
       this.channel = channelForInsertRows;
       this.insertRowsStreamingBuffer = insertRowsStreamingBuffer;
       this.enableSchemaEvolution = enableSchemaEvolution;
       this.conn = conn;
+      this.enableNesting = enableNesting;
       this.nestColExcl = nestColExcl;
     }
 
@@ -678,6 +683,7 @@ public class TopicPartitionChannel {
             this.channel.insertRows(
                 records, Long.toString(this.insertRowsStreamingBuffer.getLastOffset()));
       } else {
+        LOGGER.info("MJCLOG2 Iterating through the record batch with size {}", records.size());
         for (int idx = 0; idx < records.size(); idx++) {
 //          TODO: CF
 
@@ -707,8 +713,9 @@ public class TopicPartitionChannel {
               boolean changesApplied;
               // Instead of using the first row in buffer to calculate whether to evolve the schema, we use the current record.
               // This allows us to move through the buffer until we've resolved all conflicts with the Snowflake table schema and recordSchema.
-              SinkRecord unflattenedRec = this.insertRowsStreamingBuffer.getSinkRecord(originalSinkRecordIdx);
-              changesApplied = SchematizationUtils.evolveSchemaIfNeeded(
+              if (this.enableNesting) {
+                SinkRecord unflattenedRec = this.insertRowsStreamingBuffer.getSinkRecord(originalSinkRecordIdx);
+                changesApplied = SchematizationUtils.evolveSchemaIfNeeded(
                         this.conn,
                         this.channel.getTableName(),
                         nonNullableColumns,
@@ -718,6 +725,15 @@ public class TopicPartitionChannel {
 //                Run through the records until we apply changes
 //                This is needed for cases where we're finding new cols
 //                But the first message/row we process only has NULLs; which means we can't infer type
+              } else {
+                changesApplied = SchematizationUtils.evolveSchemaIfNeeded(
+                        this.conn,
+                        this.channel.getTableName(),
+                        nonNullableColumns,
+                        extraColNames,
+                        this.insertRowsStreamingBuffer.getSinkRecord(originalSinkRecordIdx)
+                );
+              }
               if (changesApplied) {
                 // Offset reset needed since it's possible that we successfully ingested partial batch
                 needToResetOffset = true;
@@ -808,10 +824,13 @@ public class TopicPartitionChannel {
               // Map error row number to index in sinkRecords list.
               try {
                   HashMap<String, ?> rowContent = (HashMap<String, ?>) insertError.getRowContent();
-                  // TODO: take out this hack
-                  if (rowContent.getOrDefault("RECORD_METADATA", null) != null) {
-                    HashMap<String, Object> metadata = new ObjectMapper().readValue((String) rowContent.get("RECORD_METADATA"), HashMap.class);
+                LOGGER.info("MJCLOG2 Running handleInsertRowsFailures and checking the rowContent {}", rowContent);
+
+                // TODO: take out this hack
+                  if (rowContent.getOrDefault(Utils.quoteNameIfNeeded("RECORD_METADATA"), null) != null) {
+                    HashMap<String, Object> metadata = new ObjectMapper().readValue((String) rowContent.get(Utils.quoteNameIfNeeded("RECORD_METADATA")), HashMap.class);
                     List<SinkRecord> res = insertedRecordsToBuffer.stream().filter((rec) -> ((Long) rec.kafkaOffset()).longValue() == ((Number) metadata.get("offset")).longValue()).collect(Collectors.toList());
+                    LOGGER.info("MJCLOG2 Running handleInsertRowsFailures with metadata {} and res.get(0) {} and insertError {}", metadata, res.get(0), insertError.getException());
                     this.kafkaRecordErrorReporter.reportError(res.get(0), insertError.getException());
                   }
               } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
