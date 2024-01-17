@@ -824,7 +824,9 @@ public class TopicPartitionChannel {
               // Map error row number to index in sinkRecords list.
               try {
                   HashMap<String, ?> rowContent = (HashMap<String, ?>) insertError.getRowContent();
-                  // TODO: take out this hack
+                LOGGER.info("MJCLOG2 Running handleInsertRowsFailures and checking the rowContent {}", rowContent);
+
+                // TODO: take out this hack
                   if (rowContent.getOrDefault(Utils.quoteNameIfNeeded("RECORD_METADATA"), null) != null) {
                     HashMap<String, Object> metadata = new ObjectMapper().readValue((String) rowContent.get(Utils.quoteNameIfNeeded("RECORD_METADATA")), HashMap.class);
                     List<SinkRecord> res = insertedRecordsToBuffer.stream().filter((rec) -> ((Long) rec.kafkaOffset()).longValue() == ((Number) metadata.get("offset")).longValue()).collect(Collectors.toList());
