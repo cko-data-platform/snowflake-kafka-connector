@@ -627,7 +627,7 @@ public class TopicPartitionChannel {
     return Failsafe.with(reopenChannelFallbackExecutorForInsertRows)
         .get(
             new InsertRowsApiResponseSupplier(
-                this.channel, buffer, this.enableSchemaEvolution, this.conn, nestColExcl));
+                this.channel, buffer, this.enableSchemaEvolution, this.conn, this.nestDepth >= 0, nestColExcl));
   }
 
   /** Invokes the API given the channel and streaming Buffer. */
@@ -645,6 +645,9 @@ public class TopicPartitionChannel {
 
     // Connection service which will be used to do the ALTER TABLE command for schema evolution
     private final SnowflakeConnectionService conn;
+
+    private final boolean enableNesting;
+    
     private final List<String> nestColExcl;
 
     private InsertRowsApiResponseSupplier(
@@ -652,11 +655,13 @@ public class TopicPartitionChannel {
             StreamingBuffer insertRowsStreamingBuffer,
             boolean enableSchemaEvolution,
             SnowflakeConnectionService conn,
+            boolean enableNesting,
             List<String> nestColExcl) {
       this.channel = channelForInsertRows;
       this.insertRowsStreamingBuffer = insertRowsStreamingBuffer;
       this.enableSchemaEvolution = enableSchemaEvolution;
       this.conn = conn;
+      this.enableNesting = enableNesting;
       this.nestColExcl = nestColExcl;
     }
 
@@ -678,6 +683,7 @@ public class TopicPartitionChannel {
             this.channel.insertRows(
                 records, Long.toString(this.insertRowsStreamingBuffer.getLastOffset()));
       } else {
+        LOGGER.info("MJCLOG2 Iterating through the record batch with size {}", records.size());
         for (int idx = 0; idx < records.size(); idx++) {
 //          TODO: CF
 
@@ -707,8 +713,9 @@ public class TopicPartitionChannel {
               boolean changesApplied;
               // Instead of using the first row in buffer to calculate whether to evolve the schema, we use the current record.
               // This allows us to move through the buffer until we've resolved all conflicts with the Snowflake table schema and recordSchema.
-              SinkRecord unflattenedRec = this.insertRowsStreamingBuffer.getSinkRecord(originalSinkRecordIdx);
-              changesApplied = SchematizationUtils.evolveSchemaIfNeeded(
+              if (this.enableNesting) {
+                SinkRecord unflattenedRec = this.insertRowsStreamingBuffer.getSinkRecord(originalSinkRecordIdx);
+                changesApplied = SchematizationUtils.evolveSchemaIfNeeded(
                         this.conn,
                         this.channel.getTableName(),
                         nonNullableColumns,
@@ -718,6 +725,15 @@ public class TopicPartitionChannel {
 //                Run through the records until we apply changes
 //                This is needed for cases where we're finding new cols
 //                But the first message/row we process only has NULLs; which means we can't infer type
+              } else {
+                changesApplied = SchematizationUtils.evolveSchemaIfNeeded(
+                        this.conn,
+                        this.channel.getTableName(),
+                        nonNullableColumns,
+                        extraColNames,
+                        this.insertRowsStreamingBuffer.getSinkRecord(originalSinkRecordIdx)
+                );
+              }
               if (changesApplied) {
                 // Offset reset needed since it's possible that we successfully ingested partial batch
                 needToResetOffset = true;

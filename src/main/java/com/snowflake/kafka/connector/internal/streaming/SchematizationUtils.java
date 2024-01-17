@@ -77,6 +77,7 @@ public class SchematizationUtils {
     // Update nullability if needed, ignore any exceptions since other task might be succeeded
     if (nonNullableColumns != null) {
       try {
+        LOGGER.info("MJCLOG2 Trying to alter columns {} in table {} to update their nullability.", tableName, nonNullableColumns);
         conn.alterNonNullableColumns(tableName, nonNullableColumns);
         changesApplied = true;
       } catch (SnowflakeKafkaConnectorException e) {
