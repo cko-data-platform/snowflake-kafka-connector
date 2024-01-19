@@ -145,7 +145,7 @@ public class SchematizationUtils {
     }
 
     Map<String, String> schemaMap = (ignoreSchema ? new HashMap<>() : getSchemaMapFromRecord(record));
-    JsonNode recordNode = RecordService.convertToJson((ignoreSchema ? null : record.valueSchema()), record.value());
+    JsonNode recordNode = RecordService.convertToJson((ignoreSchema ? null : record.valueSchema()), record.value(), true);
     Set<String> columnNamesSet = new HashSet<>(columnNames);
     LOGGER.info("changes deployed - " + schemaMap + "::::" + ignoreSchema + "::::" + recordNode);
 
@@ -211,7 +211,7 @@ public class SchematizationUtils {
 //      // only when the type of the value is unrecognizable for JAVA
 //      throw SnowflakeErrors.ERROR_5021.getException("class: " + value.getClass());
 //    }
-    return schemaType != null ? convertToSnowflakeType(schemaType) : null;
+    return schemaType != null ? convertToSnowflakeType(schemaType, null) : null;
   }
 
   /** Convert a json node type to kafka data type */

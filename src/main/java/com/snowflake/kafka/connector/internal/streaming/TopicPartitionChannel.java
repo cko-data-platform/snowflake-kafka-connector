@@ -629,12 +629,12 @@ public class TopicPartitionChannel {
       if (response != null) {
         LOGGER.warn(
                 "[INSERT_BUFFERED_RECORDS] Failure inserting buffer {} for channel: {}\n {}\n {}",
-                streamingBufferToInsert, this.getChannelName(), ex, response.getInsertErrors().toString()
+                streamingBufferToInsert, this.getChannelNameFormatV1(), ex, response.getInsertErrors().toString()
         );
       } else {
         LOGGER.warn(
                 "[INSERT_BUFFERED_RECORDS] Failure inserting buffer {} for channel: {} {}",
-                streamingBufferToInsert, this.getChannelName(), ex);
+                streamingBufferToInsert, this.getChannelNameFormatV1(), ex);
       }
     }
     return response;
