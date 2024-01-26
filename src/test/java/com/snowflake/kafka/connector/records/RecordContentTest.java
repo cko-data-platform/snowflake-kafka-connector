@@ -5,6 +5,7 @@ import com.snowflake.kafka.connector.Utils;
 import com.snowflake.kafka.connector.internal.SnowflakeErrors;
 import com.snowflake.kafka.connector.internal.SnowflakeKafkaConnectorException;
 import com.snowflake.kafka.connector.internal.TestUtils;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -12,6 +13,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.Map;
+
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.core.JsonProcessingException;
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.core.type.TypeReference;
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.JsonNode;
@@ -117,7 +119,8 @@ public class RecordContentTest {
                 mapper.readTree(
                         "{\"int8\":12,\"int16\":12,\"int32\":12,\"int64\":12,\"float32\":12.2,\"float64\":12.2,\"boolean\":true,\"string\":\"foo\",\"bytes\":\"Zm9v\",\"array\":[\"a\",\"b\",\"c\"],\"map\":{\"field\":1},\"mapNonStringKeys\":[[1,1]]}");
         Map<String, Object> jsonMap =
-                mapper.convertValue(jsonObject, new TypeReference<Map<String, Object>>() {});
+                mapper.convertValue(jsonObject, new TypeReference<Map<String, Object>>() {
+                });
         content = new SnowflakeRecordContent(null, jsonMap, false);
         assert content
                 .getData()[0]
@@ -345,10 +348,11 @@ public class RecordContentTest {
         RecordService service = new RecordService();
         Map<String, Object> recordData = service.getProcessedRecordForStreamingIngest(record);
 
-    assert recordData.size() == 2;
-    assert recordData.get("\"RECORD_CONTENT\"").equals(expectedRecordContent);
-    assert recordData.get("\"RECORD_METADATA\"").toString().contains(expectedRecordMetadataKey);
-  }
+        System.out.println(recordData);
+        assert recordData.size() == 2;
+        assert recordData.get("\"RECORD_CONTENT\"").equals(expectedRecordContent);
+        assert recordData.get("\"RECORD_METADATA\"").toString().contains(expectedRecordMetadataKey);
+    }
 
     @Test
     public void testSchematizationNestedStringField() throws JsonProcessingException {
@@ -424,7 +428,6 @@ public class RecordContentTest {
         // a non-double-quoted column name will be transformed into uppercase
 
 
-
         assert got.get("\"OUTER_2_STRUCT_OUTER_STRUCT_NAME\"").equals("sf");
         assert got.get("\"OUTER_2_STRUCT_OUTER_STRUCT_ANSWER\"").equals("42");
     }
@@ -457,7 +460,7 @@ public class RecordContentTest {
     }
 
 
-//    Any fields include "NestColExcl" should NOT be flattened
+    //    Any fields include "NestColExcl" should NOT be flattened
     @Test
     public void testSchematizationNestedExclField() throws JsonProcessingException {
         RecordService service = new RecordService();

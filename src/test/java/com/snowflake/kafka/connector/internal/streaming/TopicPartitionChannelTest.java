@@ -605,13 +605,13 @@ public class TopicPartitionChannelTest {
             .equals("true")) {
       InsertValidationResponse validationResponse1 = new InsertValidationResponse();
       InsertValidationResponse.InsertError insertError1 =
-              new InsertValidationResponse.InsertError(getInsertErrorRowContent(0), 0);
+              new InsertValidationResponse.InsertError(getInsertErrorRowContent(1), 0);
       insertError1.setException(SF_EXCEPTION);
       validationResponse1.addError(insertError1);
 
       InsertValidationResponse validationResponse2 = new InsertValidationResponse();
       InsertValidationResponse.InsertError insertError2 =
-              new InsertValidationResponse.InsertError(getInsertErrorRowContent(0), 0);
+              new InsertValidationResponse.InsertError(getInsertErrorRowContent(2), 0);
       insertError2.setException(SF_EXCEPTION);
       insertError2.setExtraColNames(Collections.singletonList("gender"));
       validationResponse2.addError(insertError2);
@@ -842,7 +842,7 @@ public class TopicPartitionChannelTest {
     streamingBuffer.insert(records.get(0));
 
     assert topicPartitionChannel.insertBufferedRecords(streamingBuffer).hasErrors();
-
+    System.out.println(kafkaRecordErrorReporter.getReportedRecords().size());
     assert kafkaRecordErrorReporter.getReportedRecords().size() == 1;
   }
 
@@ -960,31 +960,31 @@ public class TopicPartitionChannelTest {
   @Test
   public void testBufferBytesThreshold() throws Exception {
     Mockito.when(mockStreamingChannel.getLatestCommittedOffsetToken())
-        .thenReturn(null)
-        .thenReturn("0")
-        .thenReturn("1");
+            .thenReturn(null)
+            .thenReturn("0")
+            .thenReturn("1");
 
     Mockito.when(
-            mockStreamingChannel.insertRows(
-                ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class)))
-        .thenReturn(new InsertValidationResponse());
+                    mockStreamingChannel.insertRows(
+                            ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class)))
+            .thenReturn(new InsertValidationResponse());
 
     final long bufferFlushTimeSeconds = 5L;
     StreamingBufferThreshold bufferThreshold =
-        new StreamingBufferThreshold(bufferFlushTimeSeconds, 800 /* < 1KB */, 10000000L);
+            new StreamingBufferThreshold(bufferFlushTimeSeconds, 800 /* < 1KB */, 10000000L);
 
     TopicPartitionChannel topicPartitionChannel =
-        new TopicPartitionChannel(
-            mockStreamingClient,
-            topicPartition,
-            TEST_CHANNEL_NAME,
-            TEST_TABLE_NAME,
-            bufferThreshold,
-            sfConnectorConfig,
-            mockKafkaRecordErrorReporter,
-            mockSinkTaskContext,
-            mockSnowflakeConnectionService,
-            mockTelemetryService);
+            new TopicPartitionChannel(
+                    mockStreamingClient,
+                    topicPartition,
+                    TEST_CHANNEL_NAME,
+                    TEST_TABLE_NAME,
+                    bufferThreshold,
+                    sfConnectorConfig,
+                    mockKafkaRecordErrorReporter,
+                    mockSinkTaskContext,
+                    mockSnowflakeConnectionService,
+                    mockTelemetryService);
 
     // Sending 5 records will trigger a buffer bytes based threshold after 4 records have been
     // added. Size of each record after serialization to Json is 260 Bytes
@@ -1004,7 +1004,7 @@ public class TopicPartitionChannelTest {
 
     Assert.assertTrue(topicPartitionChannel.isPartitionBufferEmpty());
     Mockito.verify(mockStreamingChannel, Mockito.times(2))
-        .insertRows(ArgumentMatchers.any(), ArgumentMatchers.any());
+            .insertRows(ArgumentMatchers.any(), ArgumentMatchers.any());
   }
 
   @Test
