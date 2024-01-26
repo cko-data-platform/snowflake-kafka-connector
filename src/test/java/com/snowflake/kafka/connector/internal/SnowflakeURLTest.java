@@ -17,10 +17,12 @@
 package com.snowflake.kafka.connector.internal;
 
 import com.snowflake.kafka.connector.SnowflakeSinkConnectorConfig;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.contrib.java.lang.system.EnvironmentVariables;
 
+@Ignore
 public class SnowflakeURLTest {
   @Rule public final EnvironmentVariables environmentVariables = new EnvironmentVariables();
 

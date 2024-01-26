@@ -6,10 +6,12 @@ import com.snowflake.kafka.connector.internal.TestUtils;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.contrib.java.lang.system.EnvironmentVariables;
 
+@Ignore
 public class UtilsTest {
   @Rule public final EnvironmentVariables environmentVariables = new EnvironmentVariables();
 

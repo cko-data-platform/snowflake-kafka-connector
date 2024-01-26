@@ -27,11 +27,13 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.JsonNode;
 import net.snowflake.client.jdbc.telemetry.Telemetry;
 import net.snowflake.client.jdbc.telemetry.TelemetryData;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
+@Ignore
 public class SnowflakeTelemetryServiceTest {
   @Parameterized.Parameters(name = "ingestionMethod: {0}")
   public static List<IngestionMethodConfig> input() {

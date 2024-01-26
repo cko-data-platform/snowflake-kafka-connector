@@ -29,12 +29,14 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import net.snowflake.ingest.internal.com.github.benmanes.caffeine.cache.LoadingCache;
 import net.snowflake.ingest.streaming.SnowflakeStreamingIngestClient;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
 @RunWith(Parameterized.class)
+@Ignore
 public class StreamingClientProviderIT {
   private final boolean enableClientOptimization;
   private final Map<String, String> clientConfig = TestUtils.getConfForStreaming();

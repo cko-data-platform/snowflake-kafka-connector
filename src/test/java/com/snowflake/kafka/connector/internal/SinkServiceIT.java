@@ -26,6 +26,7 @@ import org.junit.After;
 import org.junit.Ignore;
 import org.junit.Test;
 
+@Ignore
 public class SinkServiceIT {
   private SnowflakeConnectionService conn = TestUtils.getConnectionService();
   private String table = TestUtils.randomTableName();

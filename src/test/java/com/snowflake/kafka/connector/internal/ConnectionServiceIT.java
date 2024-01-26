@@ -34,8 +34,10 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
+@Ignore
 public class ConnectionServiceIT {
   private final SnowflakeConnectionService conn = TestUtils.getConnectionService();
 

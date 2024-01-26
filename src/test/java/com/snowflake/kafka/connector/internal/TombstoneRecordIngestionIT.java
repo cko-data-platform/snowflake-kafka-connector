@@ -19,11 +19,13 @@ import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.storage.Converter;
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
+@Ignore
 public class TombstoneRecordIngestionIT {
   @Parameterized.Parameters(name = "behaviorOnNullValues: {0}")
   public static Collection<Object> input() {

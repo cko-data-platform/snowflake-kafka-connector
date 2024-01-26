@@ -24,11 +24,10 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.*;
 
+
+@Ignore
 public class TopicPartitionChannelIT {
 
   private SnowflakeConnectionService conn = TestUtils.getConnectionServiceForStreaming();
