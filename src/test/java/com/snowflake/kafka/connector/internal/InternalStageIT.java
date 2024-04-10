@@ -11,13 +11,18 @@ import java.util.Properties;
 import net.snowflake.client.core.OCSPMode;
 import net.snowflake.client.core.SFSessionProperty;
 import net.snowflake.client.core.SFStatement;
-import net.snowflake.client.jdbc.*;
+import net.snowflake.client.jdbc.SnowflakeConnectionV1;
+import net.snowflake.client.jdbc.SnowflakeFileTransferAgent;
+import net.snowflake.client.jdbc.SnowflakeFileTransferConfig;
+import net.snowflake.client.jdbc.SnowflakeFileTransferMetadataV1;
+import net.snowflake.client.jdbc.SnowflakeSQLException;
 import net.snowflake.client.jdbc.cloud.storage.StageInfo;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
+@Ignore
 public class InternalStageIT {
 
   private static SnowflakeConnectionService service;

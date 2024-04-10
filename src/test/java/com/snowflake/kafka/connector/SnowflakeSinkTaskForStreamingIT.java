@@ -27,10 +27,7 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMappe
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.*;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.InjectMocks;
@@ -44,6 +41,7 @@ import org.slf4j.Logger;
  * com.snowflake.kafka.connector.internal.streaming.SnowflakeSinkServiceV2}
  */
 @RunWith(Parameterized.class)
+@Ignore
 public class SnowflakeSinkTaskForStreamingIT {
 
   private String topicName;

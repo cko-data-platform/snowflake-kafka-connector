@@ -71,7 +71,7 @@ import org.apache.kafka.common.config.ConfigValue;
 public class Utils {
 
   // Connector version, change every release
-  public static final String VERSION = "1.8.4-CKO";
+  public static final String VERSION = "1.8.5-CKO";
 
   // connector parameter list
   public static final String NAME = "name";
@@ -437,12 +437,21 @@ public class Utils {
                 "Schematization is only available with {}.",
                 IngestionMethodConfig.SNOWPIPE_STREAMING.toString()));
       }
-      if (config.containsKey(SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_FILE_VERSION)) {
+      if (config.containsKey(SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_MAX_CLIENT_LAG)) {
         invalidConfigParams.put(
-            SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_FILE_VERSION,
+            SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_MAX_CLIENT_LAG,
             Utils.formatString(
                 "{} is only available with ingestion type: {}.",
-                SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_FILE_VERSION,
+                SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_MAX_CLIENT_LAG,
+                IngestionMethodConfig.SNOWPIPE_STREAMING.toString()));
+      }
+      if (config.containsKey(
+          SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_CLIENT_PROVIDER_OVERRIDE_MAP)) {
+        invalidConfigParams.put(
+            SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_CLIENT_PROVIDER_OVERRIDE_MAP,
+            Utils.formatString(
+                "{} is only available with ingestion type: {}.",
+                SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_CLIENT_PROVIDER_OVERRIDE_MAP,
                 IngestionMethodConfig.SNOWPIPE_STREAMING.toString()));
       }
       if (config.containsKey(
@@ -454,6 +463,14 @@ public class Utils {
             SnowflakeSinkConnectorConfig.ENABLE_STREAMING_CLIENT_OPTIMIZATION_CONFIG,
             Utils.formatString(
                 "Streaming client optimization is only available with {}.",
+                IngestionMethodConfig.SNOWPIPE_STREAMING.toString()));
+      }
+      if (config.containsKey(
+          SnowflakeSinkConnectorConfig.ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_CONFIG)) {
+        invalidConfigParams.put(
+            SnowflakeSinkConnectorConfig.ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_CONFIG,
+            Utils.formatString(
+                "Streaming client Channel migration is only available with {}.",
                 IngestionMethodConfig.SNOWPIPE_STREAMING.toString()));
       }
     }
@@ -719,6 +736,29 @@ public class Utils {
       throw SnowflakeErrors.ERROR_0021.getException();
     }
     return topic2Table;
+  }
+
+  /**
+   * Convert a Comma separated key value pairs into a Map
+   *
+   * @param input Provided in KC config
+   * @return Map
+   */
+  public static Map<String, String> parseCommaSeparatedKeyValuePairs(String input) {
+    Map<String, String> pairs = new HashMap<>();
+    for (String str : input.split(",")) {
+      String[] tt = str.split(":");
+
+      if (tt.length != 2 || tt[0].trim().isEmpty() || tt[1].trim().isEmpty()) {
+        LOGGER.error(
+            "Invalid {} config format: {}",
+            SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_CLIENT_PROVIDER_OVERRIDE_MAP,
+            input);
+        throw SnowflakeErrors.ERROR_0030.getException();
+      }
+      pairs.put(tt[0].trim(), tt[1].trim());
+    }
+    return pairs;
   }
 
   static final String loginPropList[] = {SF_URL, SF_USER, SF_SCHEMA, SF_DATABASE};

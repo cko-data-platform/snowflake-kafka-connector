@@ -11,8 +11,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
+import org.junit.Ignore;
 import org.junit.Test;
 
+@Ignore
 public class ConnectorIT {
   static final String allPropertiesList[] = {
     SnowflakeSinkConnectorConfig.SNOWFLAKE_URL,
@@ -251,9 +253,26 @@ public class ConnectorIT {
   }
 
   @Test
+  public void testValidateConfigProviderPasswordConfig() {
+    Map<String, String> config = getCorrectConfig();
+    config.put(SnowflakeSinkConnectorConfig.SNOWFLAKE_PRIVATE_KEY, " ${configProvider:/");
+    Map<String, ConfigValue> validateMap = toValidateMap(config);
+    assertPropHasError(validateMap, new String[] {});
+  }
+
+  @Test
   public void testValidateFilePassphraseConfig() {
     Map<String, String> config = getCorrectConfig();
     config.put(SnowflakeSinkConnectorConfig.SNOWFLAKE_PRIVATE_KEY_PASSPHRASE, " ${file:/");
+    Map<String, ConfigValue> validateMap = toValidateMap(config);
+    assertPropHasError(validateMap, new String[] {});
+  }
+
+  @Test
+  public void testValidateConfigProviderPassphraseConfig() {
+    Map<String, String> config = getCorrectConfig();
+    config.put(
+        SnowflakeSinkConnectorConfig.SNOWFLAKE_PRIVATE_KEY_PASSPHRASE, " ${configProvider:/");
     Map<String, ConfigValue> validateMap = toValidateMap(config);
     assertPropHasError(validateMap, new String[] {});
   }

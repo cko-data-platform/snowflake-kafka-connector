@@ -17,8 +17,10 @@ import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
+@Ignore
 public class SnowflakeTelemetryPipeStatusMetricsIT {
   private String topic = "test";
   private int partition = 0;

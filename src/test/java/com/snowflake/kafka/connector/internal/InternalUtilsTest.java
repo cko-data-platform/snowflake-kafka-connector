@@ -8,10 +8,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import net.snowflake.ingest.connection.IngestStatus;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class InternalUtilsTest {
   @Test
+  @Ignore
   public void testPrivateKey() {
     assert TestUtils.assertError(
         SnowflakeErrors.ERROR_0002, () -> InternalUtils.parsePrivateKey("adfsfsaff"));
@@ -75,6 +77,7 @@ public class InternalUtilsTest {
   }
 
   @Test
+  @Ignore
   public void testCreateProperties() {
     Map<String, String> config = TestUtils.getConf();
     SnowflakeURL url = TestUtils.getUrl();

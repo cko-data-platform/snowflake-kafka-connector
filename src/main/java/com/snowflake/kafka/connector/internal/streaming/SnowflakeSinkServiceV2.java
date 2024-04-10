@@ -1,6 +1,7 @@
 package com.snowflake.kafka.connector.internal.streaming;
 
 import static com.snowflake.kafka.connector.SnowflakeSinkConnectorConfig.BUFFER_SIZE_BYTES_DEFAULT;
+import static com.snowflake.kafka.connector.SnowflakeSinkConnectorConfig.ENABLE_STREAMING_CLIENT_OPTIMIZATION_DEFAULT;
 import static com.snowflake.kafka.connector.SnowflakeSinkConnectorConfig.SNOWFLAKE_ROLE;
 import static com.snowflake.kafka.connector.internal.streaming.StreamingUtils.STREAMING_BUFFER_COUNT_RECORDS_DEFAULT;
 import static com.snowflake.kafka.connector.internal.streaming.StreamingUtils.STREAMING_BUFFER_FLUSH_TIME_DEFAULT_SEC;
@@ -22,8 +23,10 @@ import com.snowflake.kafka.connector.records.RecordService;
 import com.snowflake.kafka.connector.records.SnowflakeMetadataConfig;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import net.snowflake.ingest.streaming.SnowflakeStreamingIngestClient;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -93,7 +96,7 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
   private boolean enableSchematization;
 
   /**
-   * Key is formulated in {@link #partitionChannelKey(String, String, int)} }
+   * Key is formulated in {@link #partitionChannelKey(String, int)} }
    *
    * <p>value is the Streaming Ingest Channel implementation (Wrapped around TopicPartitionChannel)
    */
@@ -101,6 +104,9 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
 
   // Cache for schema evolution
   private final Map<String, Boolean> tableName2SchemaEvolutionPermission;
+
+  // Set that keeps track of the channels that have been seen per input batch
+  private final Set<String> channelsVisitedPerBatch = new HashSet<>();
 
   public SnowflakeSinkServiceV2(
       SnowflakeConnectionService conn, Map<String, String> connectorConfig) {
@@ -242,8 +248,7 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
       final TopicPartition topicPartition,
       boolean hasSchemaEvolutionPermission) {
     final String partitionChannelKey =
-        partitionChannelKey(
-            conn.getConnectorName(), topicPartition.topic(), topicPartition.partition());
+        partitionChannelKey(topicPartition.topic(), topicPartition.partition());
     // Create new instance of TopicPartitionChannel which will always open the channel.
     partitionsToChannel.put(
         partitionChannelKey,
@@ -275,13 +280,15 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
    *     Topic and multiple Partitions
    */
   @Override
-  public void insert(Collection<SinkRecord> records) {
+  public void insert(final Collection<SinkRecord> records) {
     // note that records can be empty but, we will still need to check for time based flush
+    channelsVisitedPerBatch.clear();
     for (SinkRecord record : records) {
-      // check if need to handle null value records
+      // check if it needs to handle null value records
       if (recordService.shouldSkipNullValue(record, behaviorOnNullValues)) {
         continue;
       }
+
       // While inserting into buffer, we will check for count threshold and buffered bytes
       // threshold.
       insert(record);
@@ -302,8 +309,7 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
    */
   @Override
   public void insert(SinkRecord record) {
-    String partitionChannelKey =
-        partitionChannelKey(this.conn.getConnectorName(), record.topic(), record.kafkaPartition());
+    String partitionChannelKey = partitionChannelKey(record.topic(), record.kafkaPartition());
     // init a new topic partition if it's not presented in cache or if channel is closed
     if (!partitionsToChannel.containsKey(partitionChannelKey)
         || partitionsToChannel.get(partitionChannelKey).isChannelClosed()) {
@@ -317,14 +323,14 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
     }
 
     TopicPartitionChannel channelPartition = partitionsToChannel.get(partitionChannelKey);
-    channelPartition.insertRecordToBuffer(record);
+    boolean isFirstRowPerPartitionInBatch = channelsVisitedPerBatch.add(partitionChannelKey);
+    channelPartition.insertRecordToBuffer(record, isFirstRowPerPartitionInBatch);
   }
 
   @Override
   public long getOffset(TopicPartition topicPartition) {
     String partitionChannelKey =
-        partitionChannelKey(
-            conn.getConnectorName(), topicPartition.topic(), topicPartition.partition());
+        partitionChannelKey(topicPartition.topic(), topicPartition.partition());
     if (partitionsToChannel.containsKey(partitionChannelKey)) {
       long offset = partitionsToChannel.get(partitionChannelKey).getOffsetSafeToCommitToKafka();
       partitionsToChannel.get(partitionChannelKey).setLatestConsumerOffset(offset);
@@ -358,7 +364,7 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
     partitionsToChannel.clear();
 
     StreamingClientProvider.getStreamingClientProviderInstance()
-        .closeClient(this.streamingIngestClient);
+        .closeClient(this.connectorConfig, this.streamingIngestClient);
   }
 
   /**
@@ -378,8 +384,7 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
     partitions.forEach(
         topicPartition -> {
           final String partitionChannelKey =
-              partitionChannelKey(
-                  conn.getConnectorName(), topicPartition.topic(), topicPartition.partition());
+              partitionChannelKey(topicPartition.topic(), topicPartition.partition());
           TopicPartitionChannel topicPartitionChannel =
               partitionsToChannel.get(partitionChannelKey);
           // Check for null since it's possible that the something goes wrong even before the
@@ -389,7 +394,7 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
           }
           LOGGER.info(
               "Closing partitionChannel:{}, partition:{}, topic:{}",
-              topicPartitionChannel == null ? null : topicPartitionChannel.getChannelName(),
+              topicPartitionChannel == null ? null : topicPartitionChannel.getChannelNameFormatV1(),
               topicPartition.topic(),
               topicPartition.partition());
           partitionsToChannel.remove(partitionChannelKey);
@@ -402,7 +407,27 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
   }
 
   @Override
-  public void setIsStoppedToTrue() {}
+  public void stop() {
+    final boolean isOptimizationEnabled =
+        Boolean.parseBoolean(
+            connectorConfig.getOrDefault(
+                SnowflakeSinkConnectorConfig.ENABLE_STREAMING_CLIENT_OPTIMIZATION_CONFIG,
+                Boolean.toString(ENABLE_STREAMING_CLIENT_OPTIMIZATION_DEFAULT)));
+    // when optimization is enabled single streamingIngestClient instance may be used by many
+    // SinkService instances
+    // stopping the client may cause unexpected behaviour
+    if (!isOptimizationEnabled) {
+      try {
+        StreamingClientProvider.getStreamingClientProviderInstance()
+            .closeClient(connectorConfig, this.streamingIngestClient);
+      } catch (Exception e) {
+        LOGGER.warn(
+            "Could not close streaming ingest client {}. Reason: {}",
+            streamingIngestClient.getName(),
+            e.getMessage());
+      }
+    }
+  }
 
   /* Undefined */
   @Override
@@ -528,24 +553,19 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
   /**
    * Gets a unique identifier consisting of connector name, topic name and partition number.
    *
-   * @param connectorName Connector name is always unique. (Two connectors with same name won't be
-   *     allowed by Connector Framework)
-   *     <p>Note: Customers can have same named connector in different connector runtimes (Like DEV
-   *     or PROD)
    * @param topic topic name
    * @param partition partition number
    * @return combinartion of topic and partition
    */
   @VisibleForTesting
-  public static String partitionChannelKey(String connectorName, String topic, int partition) {
-    return connectorName + "_" + topic + "_" + partition;
+  public static String partitionChannelKey(String topic, int partition) {
+    return topic + "_" + partition;
   }
 
   /* Used for testing */
   @VisibleForTesting
-  SnowflakeStreamingIngestClient getStreamingIngestClient() {
-    return StreamingClientProvider.getStreamingClientProviderInstance()
-        .getClient(this.connectorConfig);
+  public SnowflakeStreamingIngestClient getStreamingIngestClient() {
+    return this.streamingIngestClient;
   }
 
   /**

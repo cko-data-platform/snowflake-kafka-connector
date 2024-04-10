@@ -1,5 +1,6 @@
 package com.snowflake.kafka.connector.internal.streaming;
 
+import static com.snowflake.kafka.connector.SnowflakeSinkConnectorConfig.ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_CONFIG;
 import static com.snowflake.kafka.connector.SnowflakeSinkConnectorConfig.ERRORS_DEAD_LETTER_QUEUE_TOPIC_NAME_CONFIG;
 import static com.snowflake.kafka.connector.SnowflakeSinkConnectorConfig.ERRORS_LOG_ENABLE_CONFIG;
 import static com.snowflake.kafka.connector.SnowflakeSinkConnectorConfig.ERRORS_TOLERANCE_CONFIG;
@@ -7,6 +8,7 @@ import static com.snowflake.kafka.connector.internal.TestUtils.TEST_CONNECTOR_NA
 import static com.snowflake.kafka.connector.internal.TestUtils.createBigAvroRecords;
 import static com.snowflake.kafka.connector.internal.TestUtils.createNativeJsonSinkRecords;
 import static com.snowflake.kafka.connector.internal.streaming.StreamingUtils.MAX_GET_OFFSET_TOKEN_RETRIES;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 
 import com.codahale.metrics.MetricRegistry;
@@ -72,7 +74,7 @@ public class TopicPartitionChannelTest {
   private static final int PARTITION = 0;
 
   private static final String TEST_CHANNEL_NAME =
-      SnowflakeSinkServiceV2.partitionChannelKey(TEST_CONNECTOR_NAME, TOPIC, PARTITION);
+      SnowflakeSinkServiceV2.partitionChannelKey(TOPIC, PARTITION);
   private static final String TEST_TABLE_NAME = "TEST_TABLE";
 
   private TopicPartition topicPartition;
@@ -134,6 +136,7 @@ public class TopicPartitionChannelTest {
         sfConnectorConfig,
         mockKafkaRecordErrorReporter,
         mockSinkTaskContext,
+        mockSnowflakeConnectionService,
         mockTelemetryService);
   }
 
@@ -151,6 +154,7 @@ public class TopicPartitionChannelTest {
             sfConnectorConfig,
             mockKafkaRecordErrorReporter,
             mockSinkTaskContext,
+            mockSnowflakeConnectionService,
             mockTelemetryService);
 
     Assert.assertEquals(-1L, topicPartitionChannel.fetchOffsetTokenWithRetry());
@@ -171,6 +175,7 @@ public class TopicPartitionChannelTest {
             sfConnectorConfig,
             mockKafkaRecordErrorReporter,
             mockSinkTaskContext,
+            mockSnowflakeConnectionService,
             mockTelemetryService);
 
     Assert.assertEquals(100L, topicPartitionChannel.fetchOffsetTokenWithRetry());
@@ -183,7 +188,9 @@ public class TopicPartitionChannelTest {
 
     Mockito.when(
             mockStreamingChannel.insertRows(
-                ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class)))
+                ArgumentMatchers.any(Iterable.class),
+                ArgumentMatchers.any(String.class),
+                ArgumentMatchers.any(String.class)))
         .thenReturn(new InsertValidationResponse());
 
     TopicPartitionChannel topicPartitionChannel =
@@ -196,6 +203,7 @@ public class TopicPartitionChannelTest {
             sfConnectorConfig,
             mockKafkaRecordErrorReporter,
             mockSinkTaskContext,
+            mockSnowflakeConnectionService,
             mockTelemetryService);
 
     JsonConverter converter = new JsonConverter();
@@ -216,7 +224,7 @@ public class TopicPartitionChannelTest {
             input.value(),
             offset);
 
-    topicPartitionChannel.insertRecordToBuffer(record1);
+    topicPartitionChannel.insertRecordToBuffer(record1, true);
 
     Assert.assertEquals(-1l, topicPartitionChannel.getOffsetPersistedInSnowflake());
 
@@ -251,6 +259,115 @@ public class TopicPartitionChannelTest {
     topicPartitionChannel.closeChannel();
   }
 
+  @Test
+  public void testStreamingChannelMigrationEnabledAndDisabled() {
+
+    Mockito.when(mockStreamingChannel.getFullyQualifiedName()).thenReturn(TEST_CHANNEL_NAME);
+    Mockito.when(
+            mockSnowflakeConnectionService.migrateStreamingChannelOffsetToken(
+                anyString(), anyString(), Mockito.anyString()))
+        .thenReturn(new ChannelMigrateOffsetTokenResponseDTO(50, "SUCCESS"));
+
+    // checking default
+    TopicPartitionChannel topicPartitionChannel =
+        new TopicPartitionChannel(
+            mockStreamingClient,
+            topicPartition,
+            TEST_CHANNEL_NAME,
+            TEST_TABLE_NAME,
+            true,
+            streamingBufferThreshold,
+            sfConnectorConfig,
+            mockKafkaRecordErrorReporter,
+            mockSinkTaskContext,
+            mockSnowflakeConnectionService,
+            new RecordService(mockTelemetryService),
+            mockTelemetryService,
+            false,
+            null);
+    Mockito.verify(mockSnowflakeConnectionService, Mockito.times(1))
+        .migrateStreamingChannelOffsetToken(anyString(), anyString(), anyString());
+
+    Map<String, String> customSfConfig = new HashMap<>(sfConnectorConfig);
+    customSfConfig.put(ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_CONFIG, "true");
+
+    topicPartitionChannel =
+        new TopicPartitionChannel(
+            mockStreamingClient,
+            topicPartition,
+            TEST_CHANNEL_NAME,
+            TEST_TABLE_NAME,
+            true,
+            streamingBufferThreshold,
+            customSfConfig,
+            mockKafkaRecordErrorReporter,
+            mockSinkTaskContext,
+            mockSnowflakeConnectionService,
+            new RecordService(mockTelemetryService),
+            mockTelemetryService,
+            false,
+            null);
+    Mockito.verify(mockSnowflakeConnectionService, Mockito.times(2))
+        .migrateStreamingChannelOffsetToken(anyString(), anyString(), anyString());
+
+    customSfConfig.put(ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_CONFIG, "false");
+    SnowflakeConnectionService anotherMockForParamDisabled =
+        Mockito.mock(SnowflakeConnectionService.class);
+
+    topicPartitionChannel =
+        new TopicPartitionChannel(
+            mockStreamingClient,
+            topicPartition,
+            TEST_CHANNEL_NAME,
+            TEST_TABLE_NAME,
+            true,
+            streamingBufferThreshold,
+            customSfConfig,
+            mockKafkaRecordErrorReporter,
+            mockSinkTaskContext,
+            anotherMockForParamDisabled,
+            new RecordService(mockTelemetryService),
+            mockTelemetryService,
+            false,
+            null);
+    Mockito.verify(anotherMockForParamDisabled, Mockito.times(0))
+        .migrateStreamingChannelOffsetToken(anyString(), anyString(), anyString());
+  }
+
+  @Test
+  public void testStreamingChannelMigration_InvalidResponse() {
+
+    Mockito.when(mockStreamingChannel.getFullyQualifiedName()).thenReturn(TEST_CHANNEL_NAME);
+    Mockito.when(
+            mockSnowflakeConnectionService.migrateStreamingChannelOffsetToken(
+                anyString(), anyString(), Mockito.anyString()))
+        .thenThrow(new RuntimeException("Exception migrating channel offset token"));
+    try {
+      // checking default
+      TopicPartitionChannel topicPartitionChannel =
+          new TopicPartitionChannel(
+              mockStreamingClient,
+              topicPartition,
+              TEST_CHANNEL_NAME,
+              TEST_TABLE_NAME,
+              true,
+              streamingBufferThreshold,
+              sfConnectorConfig,
+              mockKafkaRecordErrorReporter,
+              mockSinkTaskContext,
+              mockSnowflakeConnectionService,
+              new RecordService(mockTelemetryService),
+              mockTelemetryService,
+              false,
+              null);
+      Assert.fail("Should throw an exception:");
+    } catch (Exception e) {
+      Mockito.verify(mockSnowflakeConnectionService, Mockito.times(1))
+          .migrateStreamingChannelOffsetToken(anyString(), anyString(), anyString());
+      assert e.getMessage().contains("Exception migrating channel offset token");
+    }
+  }
+
   /* Only SFExceptions are retried and goes into fallback. */
   @Test(expected = SFException.class)
   public void testFetchOffsetTokenWithRetry_SFException() {
@@ -266,6 +383,7 @@ public class TopicPartitionChannelTest {
             sfConnectorConfig,
             mockKafkaRecordErrorReporter,
             mockSinkTaskContext,
+            mockSnowflakeConnectionService,
             mockTelemetryService);
 
     try {
@@ -300,6 +418,7 @@ public class TopicPartitionChannelTest {
             sfConnectorConfig,
             mockKafkaRecordErrorReporter,
             mockSinkTaskContext,
+            mockSnowflakeConnectionService,
             mockTelemetryService);
 
     int expectedRetries = MAX_GET_OFFSET_TOKEN_RETRIES;
@@ -330,6 +449,7 @@ public class TopicPartitionChannelTest {
             sfConnectorConfig,
             mockKafkaRecordErrorReporter,
             mockSinkTaskContext,
+            mockSnowflakeConnectionService,
             mockTelemetryService);
 
     try {
@@ -362,6 +482,7 @@ public class TopicPartitionChannelTest {
             sfConnectorConfig,
             mockKafkaRecordErrorReporter,
             mockSinkTaskContext,
+            mockSnowflakeConnectionService,
             mockTelemetryService);
 
     try {
@@ -390,6 +511,7 @@ public class TopicPartitionChannelTest {
             sfConnectorConfig,
             mockKafkaRecordErrorReporter,
             mockSinkTaskContext,
+            mockSnowflakeConnectionService,
             mockTelemetryService);
 
     try {
@@ -405,15 +527,26 @@ public class TopicPartitionChannelTest {
   /* Only SFExceptions goes into fallback -> reopens channel, fetch offsetToken and throws Appropriate exception */
   @Test
   public void testInsertRows_SuccessAfterReopenChannel() throws Exception {
+    final int noOfRecords = 5;
+    int expectedInsertRowsCount = 0;
+    int expectedOpenChannelCount = 0;
+    int expectedGetOffsetCount = 0;
+
+    // setup mocks to fail first insert and return two null snowflake offsets (open channel and
+    // failed insert) before succeeding
     Mockito.when(
             mockStreamingChannel.insertRows(
-                ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class)))
-        .thenThrow(SF_EXCEPTION);
+                ArgumentMatchers.any(Iterable.class),
+                ArgumentMatchers.any(String.class),
+                ArgumentMatchers.any(String.class)))
+        .thenThrow(SF_EXCEPTION)
+        .thenReturn(new InsertValidationResponse());
+    Mockito.when(mockStreamingChannel.getLatestCommittedOffsetToken())
+        .thenReturn(null)
+        .thenReturn(null)
+        .thenReturn(Long.toString(noOfRecords - 1));
 
-    // get null from snowflake first time it is called and null for second time too since insert
-    // rows was failure
-    Mockito.when(mockStreamingChannel.getLatestCommittedOffsetToken()).thenReturn(null);
-
+    // create tpchannel
     TopicPartitionChannel topicPartitionChannel =
         new TopicPartitionChannel(
             mockStreamingClient,
@@ -424,38 +557,62 @@ public class TopicPartitionChannelTest {
             sfConnectorConfig,
             mockKafkaRecordErrorReporter,
             mockSinkTaskContext,
+            mockSnowflakeConnectionService,
             mockTelemetryService);
-    final int noOfRecords = 5;
-    // Since record 0 was not able to ingest, all records in this batch will not be added into the
-    // buffer.
-    List<SinkRecord> records =
-        TestUtils.createJsonStringSinkRecords(0, noOfRecords, TOPIC, PARTITION);
+    expectedOpenChannelCount++;
+    expectedGetOffsetCount++;
 
-    records.forEach(topicPartitionChannel::insertRecordToBuffer);
-
-    Mockito.verify(topicPartitionChannel.getChannel(), Mockito.times(noOfRecords))
-        .insertRows(ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class));
-    Mockito.verify(mockStreamingClient, Mockito.times(noOfRecords + 1))
+    // verify initial mock counts after tpchannel creation
+    Mockito.verify(topicPartitionChannel.getChannel(), Mockito.times(expectedInsertRowsCount))
+        .insertRows(
+            ArgumentMatchers.any(Iterable.class),
+            ArgumentMatchers.any(String.class),
+            ArgumentMatchers.any(String.class));
+    Mockito.verify(mockStreamingClient, Mockito.times(expectedOpenChannelCount))
         .openChannel(ArgumentMatchers.any());
-    Mockito.verify(topicPartitionChannel.getChannel(), Mockito.times(noOfRecords + 1))
+    Mockito.verify(topicPartitionChannel.getChannel(), Mockito.times(expectedGetOffsetCount))
         .getLatestCommittedOffsetToken();
 
-    // Now, it should be successful
-    Mockito.when(
-            mockStreamingChannel.insertRows(
-                ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class)))
-        .thenReturn(new InsertValidationResponse());
+    // Test inserting record 0, which should fail to ingest so the other records are ignored
+    List<SinkRecord> records =
+        TestUtils.createJsonStringSinkRecords(0, noOfRecords, TOPIC, PARTITION);
+    for (int idx = 0; idx < records.size(); idx++) {
+      topicPartitionChannel.insertRecordToBuffer(records.get(idx), idx == 0);
+    }
+    expectedInsertRowsCount++;
+    expectedOpenChannelCount++;
+    expectedGetOffsetCount++;
 
-    Mockito.when(mockStreamingChannel.getLatestCommittedOffsetToken())
-        .thenReturn(Long.toString(noOfRecords - 1));
+    // verify mocks only tried ingesting once
+    Mockito.verify(topicPartitionChannel.getChannel(), Mockito.times(expectedInsertRowsCount))
+        .insertRows(
+            ArgumentMatchers.any(Iterable.class),
+            ArgumentMatchers.any(String.class),
+            ArgumentMatchers.any(String.class));
+    Mockito.verify(mockStreamingClient, Mockito.times(expectedOpenChannelCount))
+        .openChannel(ArgumentMatchers.any());
+    Mockito.verify(topicPartitionChannel.getChannel(), Mockito.times(expectedGetOffsetCount))
+        .getLatestCommittedOffsetToken();
 
     // Retry the insert again, now everything should be ingested and the offset token should be
     // noOfRecords-1
-    records.forEach(topicPartitionChannel::insertRecordToBuffer);
-    Mockito.verify(topicPartitionChannel.getChannel(), Mockito.times(noOfRecords * 2))
-        .insertRows(ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class));
-
+    for (int idx = 0; idx < records.size(); idx++) {
+      topicPartitionChannel.insertRecordToBuffer(records.get(idx), idx == 0);
+    }
     Assert.assertEquals(noOfRecords - 1, topicPartitionChannel.fetchOffsetTokenWithRetry());
+    expectedInsertRowsCount += noOfRecords;
+    expectedGetOffsetCount++;
+
+    // verify mocks ingested each record
+    Mockito.verify(topicPartitionChannel.getChannel(), Mockito.times(expectedInsertRowsCount))
+        .insertRows(
+            ArgumentMatchers.any(Iterable.class),
+            ArgumentMatchers.any(String.class),
+            ArgumentMatchers.any(String.class));
+    Mockito.verify(mockStreamingClient, Mockito.times(expectedOpenChannelCount))
+        .openChannel(ArgumentMatchers.any());
+    Mockito.verify(topicPartitionChannel.getChannel(), Mockito.times(expectedGetOffsetCount))
+        .getLatestCommittedOffsetToken();
   }
 
   @Test
@@ -465,13 +622,13 @@ public class TopicPartitionChannelTest {
             .equals("true")) {
       InsertValidationResponse validationResponse1 = new InsertValidationResponse();
       InsertValidationResponse.InsertError insertError1 =
-              new InsertValidationResponse.InsertError("CONTENT", 0);
+              new InsertValidationResponse.InsertError(getInsertErrorRowContent(1), 0);
       insertError1.setException(SF_EXCEPTION);
       validationResponse1.addError(insertError1);
 
       InsertValidationResponse validationResponse2 = new InsertValidationResponse();
       InsertValidationResponse.InsertError insertError2 =
-              new InsertValidationResponse.InsertError("CONTENT", 0);
+              new InsertValidationResponse.InsertError(getInsertErrorRowContent(2), 0);
       insertError2.setException(SF_EXCEPTION);
       insertError2.setExtraColNames(Collections.singletonList("gender"));
       validationResponse2.addError(insertError2);
@@ -525,7 +682,9 @@ public class TopicPartitionChannelTest {
       List<SinkRecord> records =
           TestUtils.createNativeJsonSinkRecords(0, noOfRecords, TOPIC, PARTITION);
 
-      records.forEach(topicPartitionChannel::insertRecordToBuffer);
+      for (int idx = 0; idx < records.size(); idx++) {
+        topicPartitionChannel.insertRecordToBuffer(records.get(idx), idx == 0);
+      }
 
       // In an ideal world, put API is going to invoke this to check if flush time threshold has
       // reached.
@@ -546,7 +705,9 @@ public class TopicPartitionChannelTest {
   public void testInsertRows_GetOffsetTokenFailureAfterReopenChannel() throws Exception {
     Mockito.when(
             mockStreamingChannel.insertRows(
-                ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class)))
+                ArgumentMatchers.any(Iterable.class),
+                ArgumentMatchers.any(String.class),
+                ArgumentMatchers.any(String.class)))
         .thenThrow(SF_EXCEPTION);
 
     // Send exception in fallback (i.e after reopen channel)
@@ -562,6 +723,7 @@ public class TopicPartitionChannelTest {
             sfConnectorConfig,
             mockKafkaRecordErrorReporter,
             mockSinkTaskContext,
+            mockSnowflakeConnectionService,
             mockTelemetryService);
 
     List<SinkRecord> records = TestUtils.createJsonStringSinkRecords(0, 1, TOPIC, PARTITION);
@@ -574,7 +736,10 @@ public class TopicPartitionChannelTest {
     } catch (SFException ex) {
       Mockito.verify(mockStreamingClient, Mockito.times(2)).openChannel(ArgumentMatchers.any());
       Mockito.verify(topicPartitionChannel.getChannel(), Mockito.times(1))
-          .insertRows(ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class));
+          .insertRows(
+              ArgumentMatchers.any(Iterable.class),
+              ArgumentMatchers.any(String.class),
+              ArgumentMatchers.any(String.class));
       // get offset token is called once after channel re-open
       Mockito.verify(topicPartitionChannel.getChannel(), Mockito.times(1))
           .getLatestCommittedOffsetToken();
@@ -588,7 +753,9 @@ public class TopicPartitionChannelTest {
     RuntimeException exception = new RuntimeException("runtime exception");
     Mockito.when(
             mockStreamingChannel.insertRows(
-                ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class)))
+                ArgumentMatchers.any(Iterable.class),
+                ArgumentMatchers.any(String.class),
+                ArgumentMatchers.any(String.class)))
         .thenThrow(exception);
 
     TopicPartitionChannel topicPartitionChannel =
@@ -601,18 +768,22 @@ public class TopicPartitionChannelTest {
             sfConnectorConfig,
             mockKafkaRecordErrorReporter,
             mockSinkTaskContext,
+            mockSnowflakeConnectionService,
             mockTelemetryService);
 
     List<SinkRecord> records = TestUtils.createJsonStringSinkRecords(0, 1, TOPIC, PARTITION);
 
-    topicPartitionChannel.insertRecordToBuffer(records.get(0));
+    topicPartitionChannel.insertRecordToBuffer(records.get(0), true);
 
     try {
       topicPartitionChannel.insertBufferedRecords(topicPartitionChannel.getStreamingBuffer());
     } catch (RuntimeException ex) {
       Mockito.verify(mockStreamingClient, Mockito.times(1)).openChannel(ArgumentMatchers.any());
       Mockito.verify(topicPartitionChannel.getChannel(), Mockito.times(1))
-          .insertRows(ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class));
+          .insertRows(
+              ArgumentMatchers.any(Iterable.class),
+              ArgumentMatchers.any(String.class),
+              ArgumentMatchers.any(String.class));
       throw ex;
     }
   }
@@ -627,7 +798,9 @@ public class TopicPartitionChannelTest {
     validationResponse.addError(insertErrorWithException);
     Mockito.when(
             mockStreamingChannel.insertRows(
-                ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class)))
+                ArgumentMatchers.any(Iterable.class),
+                ArgumentMatchers.any(String.class),
+                ArgumentMatchers.any(String.class)))
         .thenReturn(validationResponse);
     Mockito.doNothing()
         .when(mockTelemetryService)
@@ -652,7 +825,7 @@ public class TopicPartitionChannelTest {
 
     List<SinkRecord> records = TestUtils.createJsonStringSinkRecords(0, 1, TOPIC, PARTITION);
 
-    topicPartitionChannel.insertRecordToBuffer(records.get(0));
+    topicPartitionChannel.insertRecordToBuffer(records.get(0), true);
 
     try {
       topicPartitionChannel.insertBufferedRecords(topicPartitionChannel.getStreamingBuffer());
@@ -671,7 +844,9 @@ public class TopicPartitionChannelTest {
     validationResponse.addError(insertErrorWithException);
     Mockito.when(
             mockStreamingChannel.insertRows(
-                ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class)))
+                ArgumentMatchers.any(Iterable.class),
+                ArgumentMatchers.any(String.class),
+                ArgumentMatchers.any(String.class)))
         .thenReturn(validationResponse);
 
     Map<String, String> sfConnectorConfigWithErrors = new HashMap<>(sfConnectorConfig);
@@ -690,6 +865,7 @@ public class TopicPartitionChannelTest {
             sfConnectorConfigWithErrors,
             kafkaRecordErrorReporter,
             mockSinkTaskContext,
+            mockSnowflakeConnectionService,
             mockTelemetryService);
 
     List<SinkRecord> records = TestUtils.createJsonStringSinkRecords(0, 1, TOPIC, PARTITION);
@@ -699,7 +875,7 @@ public class TopicPartitionChannelTest {
     streamingBuffer.insert(records.get(0));
 
     assert topicPartitionChannel.insertBufferedRecords(streamingBuffer).hasErrors();
-
+    System.out.println(kafkaRecordErrorReporter.getReportedRecords().size());
     assert kafkaRecordErrorReporter.getReportedRecords().size() == 1;
   }
 
@@ -714,7 +890,9 @@ public class TopicPartitionChannelTest {
     validationResponse.addError(insertErrorWithException);
     Mockito.when(
             mockStreamingChannel.insertRows(
-                ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class)))
+                ArgumentMatchers.any(Iterable.class),
+                ArgumentMatchers.any(String.class),
+                ArgumentMatchers.any(String.class)))
         .thenReturn(validationResponse);
 
     Map<String, String> sfConnectorConfigWithErrors = new HashMap<>(sfConnectorConfig);
@@ -735,6 +913,7 @@ public class TopicPartitionChannelTest {
             sfConnectorConfigWithErrors,
             kafkaRecordErrorReporter,
             mockSinkTaskContext,
+            mockSnowflakeConnectionService,
             mockTelemetryService);
 
     List<SinkRecord> records = TestUtils.createJsonStringSinkRecords(0, 1, TOPIC, PARTITION);
@@ -749,6 +928,13 @@ public class TopicPartitionChannelTest {
   }
 
   public Object getInsertErrorRowContent(int offset) {
+    Map<String, Object> rowContent = new HashMap<>();
+    rowContent.put("RECORD_METADATA", "{\"topic\":\"test_insert_rows\",\"offset\":" + offset + ",\"partition\":0,\"CreateTime\":1677237623225,\"key\":\"1487335261\",\"headers\":{\"current.iteration\":148733526}}");
+    rowContent.put("topLevelKey", "topLevelValue");
+    return rowContent;
+  }
+
+  public Object getInsertErrorRowContentNoMetadata(int offset) {
     Map<String, Object> rowContent = new HashMap<>();
     rowContent.put("RECORD_METADATA", "{\"topic\":\"test_insert_rows\",\"offset\":" + offset + ",\"partition\":0,\"CreateTime\":1677237623225,\"key\":\"1487335261\",\"headers\":{\"current.iteration\":148733526}}");
     rowContent.put("topLevelKey", "topLevelValue");
@@ -809,36 +995,41 @@ public class TopicPartitionChannelTest {
   @Test
   public void testBufferBytesThreshold() throws Exception {
     Mockito.when(mockStreamingChannel.getLatestCommittedOffsetToken())
-        .thenReturn(null)
-        .thenReturn("0")
-        .thenReturn("1");
+            .thenReturn(null)
+            .thenReturn("0")
+            .thenReturn("1");
 
     Mockito.when(
             mockStreamingChannel.insertRows(
-                ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class)))
+                ArgumentMatchers.any(Iterable.class),
+                ArgumentMatchers.any(String.class),
+                ArgumentMatchers.any(String.class)))
         .thenReturn(new InsertValidationResponse());
 
     final long bufferFlushTimeSeconds = 5L;
     StreamingBufferThreshold bufferThreshold =
-        new StreamingBufferThreshold(bufferFlushTimeSeconds, 800 /* < 1KB */, 10000000L);
+            new StreamingBufferThreshold(bufferFlushTimeSeconds, 800 /* < 1KB */, 10000000L);
 
     TopicPartitionChannel topicPartitionChannel =
-        new TopicPartitionChannel(
-            mockStreamingClient,
-            topicPartition,
-            TEST_CHANNEL_NAME,
-            TEST_TABLE_NAME,
-            bufferThreshold,
-            sfConnectorConfig,
-            mockKafkaRecordErrorReporter,
-            mockSinkTaskContext,
-            mockTelemetryService);
+            new TopicPartitionChannel(
+                    mockStreamingClient,
+                    topicPartition,
+                    TEST_CHANNEL_NAME,
+                    TEST_TABLE_NAME,
+                    bufferThreshold,
+                    sfConnectorConfig,
+                    mockKafkaRecordErrorReporter,
+                    mockSinkTaskContext,
+                    mockSnowflakeConnectionService,
+                    mockTelemetryService);
 
     // Sending 5 records will trigger a buffer bytes based threshold after 4 records have been
     // added. Size of each record after serialization to Json is 260 Bytes
     List<SinkRecord> records = createNativeJsonSinkRecords(0, 5, "test", 0);
 
-    records.forEach(topicPartitionChannel::insertRecordToBuffer);
+    for (int idx = 0; idx < records.size(); idx++) {
+      topicPartitionChannel.insertRecordToBuffer(records.get(idx), idx == 0);
+    }
 
     Assert.assertEquals(0L, topicPartitionChannel.fetchOffsetTokenWithRetry());
 
@@ -852,7 +1043,8 @@ public class TopicPartitionChannelTest {
 
     Assert.assertTrue(topicPartitionChannel.isPartitionBufferEmpty());
     Mockito.verify(mockStreamingChannel, Mockito.times(2))
-        .insertRows(ArgumentMatchers.any(), ArgumentMatchers.any());
+        .insertRows(
+            ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any(String.class));
   }
 
   @Test
@@ -864,7 +1056,9 @@ public class TopicPartitionChannelTest {
 
     Mockito.when(
             mockStreamingChannel.insertRows(
-                ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class)))
+                ArgumentMatchers.any(Iterable.class),
+                ArgumentMatchers.any(String.class),
+                ArgumentMatchers.any(String.class)))
         .thenReturn(new InsertValidationResponse());
 
     final long bufferFlushTimeSeconds = 5L;
@@ -881,13 +1075,16 @@ public class TopicPartitionChannelTest {
             sfConnectorConfig,
             mockKafkaRecordErrorReporter,
             mockSinkTaskContext,
+            mockSnowflakeConnectionService,
             mockTelemetryService);
 
     // Sending 3 records will trigger a buffer bytes based threshold after 2 records have been
     // added. Size of each record after serialization to Json is ~6 KBytes
     List<SinkRecord> records = createBigAvroRecords(0, 3, "test", 0);
 
-    records.forEach(topicPartitionChannel::insertRecordToBuffer);
+    for (int idx = 0; idx < records.size(); idx++) {
+      topicPartitionChannel.insertRecordToBuffer(records.get(idx), idx == 0);
+    }
 
     Assert.assertEquals(1L, topicPartitionChannel.fetchOffsetTokenWithRetry());
 
@@ -899,7 +1096,8 @@ public class TopicPartitionChannelTest {
 
     Assert.assertTrue(topicPartitionChannel.isPartitionBufferEmpty());
     Mockito.verify(mockStreamingChannel, Mockito.times(2))
-        .insertRows(ArgumentMatchers.any(), ArgumentMatchers.any());
+        .insertRows(
+            ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any(String.class));
 
     Assert.assertEquals(2L, topicPartitionChannel.fetchOffsetTokenWithRetry());
   }
@@ -917,7 +1115,9 @@ public class TopicPartitionChannelTest {
     // setup insert
     Mockito.when(
             mockStreamingChannel.insertRows(
-                ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class)))
+                ArgumentMatchers.any(Iterable.class),
+                ArgumentMatchers.any(String.class),
+                ArgumentMatchers.any(String.class)))
         .thenReturn(new InsertValidationResponse());
     Mockito.when(
             mockStreamingChannel.insertRow(
@@ -945,7 +1145,9 @@ public class TopicPartitionChannelTest {
     // insert records
     List<SinkRecord> records =
         TestUtils.createJsonStringSinkRecords(0, noOfRecords, TOPIC, PARTITION);
-    records.forEach(topicPartitionChannel::insertRecordToBuffer);
+    for (int idx = 0; idx < records.size(); idx++) {
+      topicPartitionChannel.insertRecordToBuffer(records.get(idx), idx == 0);
+    }
 
     Thread.sleep(this.streamingBufferThreshold.getFlushTimeThresholdSeconds() + 1);
     topicPartitionChannel.insertBufferedRecordsIfFlushTimeThresholdReached();
@@ -989,7 +1191,9 @@ public class TopicPartitionChannelTest {
     // setup insert
     Mockito.when(
             mockStreamingChannel.insertRows(
-                ArgumentMatchers.any(Iterable.class), ArgumentMatchers.any(String.class)))
+                ArgumentMatchers.any(Iterable.class),
+                ArgumentMatchers.any(String.class),
+                ArgumentMatchers.any(String.class)))
         .thenReturn(new InsertValidationResponse());
     Mockito.when(
             mockStreamingChannel.insertRow(
@@ -1017,7 +1221,9 @@ public class TopicPartitionChannelTest {
     // insert records
     List<SinkRecord> records =
         TestUtils.createJsonStringSinkRecords(0, noOfRecords, TOPIC, PARTITION);
-    records.forEach(topicPartitionChannel::insertRecordToBuffer);
+    for (int idx = 0; idx < records.size(); idx++) {
+      topicPartitionChannel.insertRecordToBuffer(records.get(idx), idx == 0);
+    }
 
     Thread.sleep(this.streamingBufferThreshold.getFlushTimeThresholdSeconds() + 1);
     topicPartitionChannel.insertBufferedRecordsIfFlushTimeThresholdReached();
@@ -1029,5 +1235,14 @@ public class TopicPartitionChannelTest {
 
     topicPartitionChannel.closeChannel();
     assert resultStatus.getMetricsJmxReporter() == null;
+  }
+
+  @Test
+  public void testOffsetTokenVerificationFunction() {
+    Assert.assertTrue(StreamingUtils.offsetTokenVerificationFunction.verify("1", "2", "4", 2));
+    Assert.assertTrue(StreamingUtils.offsetTokenVerificationFunction.verify("1", "2", null, 1));
+    Assert.assertTrue(StreamingUtils.offsetTokenVerificationFunction.verify(null, null, null, 0));
+    Assert.assertFalse(StreamingUtils.offsetTokenVerificationFunction.verify("1", "3", "4", 3));
+    Assert.assertFalse(StreamingUtils.offsetTokenVerificationFunction.verify("2", "1", "4", 3));
   }
 }

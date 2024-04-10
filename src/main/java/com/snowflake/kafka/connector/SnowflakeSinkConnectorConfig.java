@@ -124,9 +124,12 @@ public class SnowflakeSinkConnectorConfig {
   public static final String INGESTION_METHOD_DEFAULT_SNOWPIPE =
       IngestionMethodConfig.SNOWPIPE.toString();
 
-  // This is the streaming bdec file version which can be defined in config
-  // NOTE: Please do not override this value unless recommended from snowflake
-  public static final String SNOWPIPE_STREAMING_FILE_VERSION = "snowflake.streaming.file.version";
+  // This is the streaming max client lag which can be defined in config
+  public static final String SNOWPIPE_STREAMING_MAX_CLIENT_LAG =
+      "snowflake.streaming.max.client.lag";
+
+  public static final String SNOWPIPE_STREAMING_CLIENT_PROVIDER_OVERRIDE_MAP =
+      "snowflake.streaming.client.provider.override.map";
 
   // TESTING
   public static final String REBALANCING = "snowflake.test.rebalancing";
@@ -137,6 +140,9 @@ public class SnowflakeSinkConnectorConfig {
   private static final ConfigDef.Validator nonEmptyStringValidator = new ConfigDef.NonEmptyString();
   private static final ConfigDef.Validator topicToTableValidator = new TopicToTableValidator();
   private static final ConfigDef.Validator KAFKA_PROVIDER_VALIDATOR = new KafkaProviderValidator();
+
+  private static final ConfigDef.Validator STREAMING_CLIENT_PROVIDER_OVERRIDE_MAP_VALIDATOR =
+      new CommaSeparatedKeyValueValidator();
 
   // For error handling
   public static final String ERROR_GROUP = "ERRORS";
@@ -179,6 +185,17 @@ public class SnowflakeSinkConnectorConfig {
   public static final String ENABLE_STREAMING_CLIENT_OPTIMIZATION_DOC =
       "Whether to optimize the streaming client to reduce cost. Note that this may affect"
           + " throughput or latency and can only be set if Streaming Snowpipe is enabled";
+
+  public static final String ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_CONFIG =
+      "enable.streaming.channel.offset.migration";
+  public static final String ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_DISPLAY =
+      "Enable Streaming Channel Offset Migration";
+  public static final boolean ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_DEFAULT = true;
+  public static final String ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_DOC =
+      "This config is used to enable/disable streaming channel offset migration logic. If true, we"
+          + " will migrate offset token from channel name format V2 to name format v1. V2 channel"
+          + " format is deprecated and V1 will be used always, disabling this config could have"
+          + " ramifications. Please consult Snowflake support before setting this to false.";
 
   // MDC logging header
   public static final String ENABLE_MDC_LOGGING_CONFIG = "enable.mdc.logging";
@@ -542,17 +559,30 @@ public class SnowflakeSinkConnectorConfig {
             ConfigDef.Width.NONE,
             INGESTION_METHOD_OPT)
         .define(
-            SNOWPIPE_STREAMING_FILE_VERSION,
-            Type.STRING,
-            "", // default is handled in Ingest SDK
-            null, // no validator
+            SNOWPIPE_STREAMING_MAX_CLIENT_LAG,
+            Type.LONG,
+            StreamingUtils.STREAMING_BUFFER_FLUSH_TIME_MINIMUM_SEC,
+            ConfigDef.Range.atLeast(StreamingUtils.STREAMING_BUFFER_FLUSH_TIME_MINIMUM_SEC),
             Importance.LOW,
-            "Acceptable values for Snowpipe Streaming BDEC Versions: 1 and 3. Check Ingest"
-                + " SDK for default behavior. Please do not set this unless Absolutely needed. ",
+            "Decide how often the buffer in the Ingest SDK will be flushed",
             CONNECTOR_CONFIG,
             6,
             ConfigDef.Width.NONE,
-            SNOWPIPE_STREAMING_FILE_VERSION)
+            SNOWPIPE_STREAMING_MAX_CLIENT_LAG)
+        .define(
+            SNOWPIPE_STREAMING_CLIENT_PROVIDER_OVERRIDE_MAP,
+            Type.STRING,
+            "",
+            STREAMING_CLIENT_PROVIDER_OVERRIDE_MAP_VALIDATOR,
+            Importance.LOW,
+            "Map of Key value pairs representing Streaming Client Properties to Override. These are"
+                + " optional and recommended to use ONLY after consulting Snowflake Support. Format"
+                + " : comma-separated tuples, e.g.:"
+                + " MAX_CLIENT_LAG:5000,other_key:value...",
+            CONNECTOR_CONFIG,
+            0,
+            ConfigDef.Width.NONE,
+            SNOWPIPE_STREAMING_CLIENT_PROVIDER_OVERRIDE_MAP)
         .define(
             ERRORS_TOLERANCE_CONFIG,
             Type.STRING,
@@ -613,7 +643,17 @@ public class SnowflakeSinkConnectorConfig {
             CONNECTOR_CONFIG,
             8,
             ConfigDef.Width.NONE,
-            ENABLE_MDC_LOGGING_DISPLAY);
+            ENABLE_MDC_LOGGING_DISPLAY)
+        .define(
+            ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_CONFIG,
+            Type.BOOLEAN,
+            ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_DEFAULT,
+            Importance.LOW,
+            ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_DOC,
+            CONNECTOR_CONFIG,
+            9,
+            ConfigDef.Width.NONE,
+            ENABLE_CHANNEL_OFFSET_TOKEN_MIGRATION_DISPLAY);
   }
 
   public static class TopicToTableValidator implements ConfigDef.Validator {
@@ -817,4 +857,45 @@ public class SnowflakeSinkConnectorConfig {
           this.validator.ensureValid(name, value);
         }
       };
+
+  /**
+   * Class which validates key value pairs in the format <key-1>:<value-1>,<key-2>:<value-2>
+   *
+   * <p>It doesn't validate the type of values, only making sure the format is correct.
+   */
+  public static class CommaSeparatedKeyValueValidator implements ConfigDef.Validator {
+    public CommaSeparatedKeyValueValidator() {}
+
+    public void ensureValid(String name, Object value) {
+      String s = (String) value;
+      // Validate the comma-separated key-value pairs string
+      if (s != null && !s.isEmpty() && !isValidCommaSeparatedKeyValueString(s)) {
+        throw new ConfigException(name, value, "Format: <key-1>:<value-1>,<key-2>:<value-2>,...");
+      }
+    }
+
+    private boolean isValidCommaSeparatedKeyValueString(String input) {
+      // Split the input string by commas
+      String[] pairs = input.split(",");
+      for (String pair : pairs) {
+        // Trim the pair to remove leading and trailing whitespaces
+        pair = pair.trim();
+        // Split each pair by colon
+        String[] keyValue = pair.split(":");
+        // Check if the pair has exactly two elements after trimming
+        if (keyValue.length != 2) {
+          return false;
+        }
+        // Check if the key or value is empty after trimming
+        if (keyValue[0].trim().isEmpty() || keyValue[1].trim().isEmpty()) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    public String toString() {
+      return "Comma-separated key-value pairs format: <key-1>:<value-1>,<key-2>:<value-2>,...";
+    }
+  }
 }

@@ -128,6 +128,15 @@ public enum SnowflakeErrors {
           + " parameter when using oauth as authenticator"),
   ERROR_0029(
       "0029", "Invalid authenticator", "Authenticator should be either oauth or snowflake_jwt"),
+  ERROR_0030(
+      "0030",
+      String.format(
+          "Invalid %s map",
+          SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_CLIENT_PROVIDER_OVERRIDE_MAP),
+      String.format(
+          "Failed to parse %s map",
+          SnowflakeSinkConnectorConfig.SNOWPIPE_STREAMING_CLIENT_PROVIDER_OVERRIDE_MAP)),
+
   // Snowflake connection issues 1---
   ERROR_1001(
       "1001",
@@ -297,7 +306,13 @@ public enum SnowflakeErrors {
       "5021",
       "Failed to get data schema",
       "Failed to get data schema. Unrecognizable data type in JSON object"),
-  ERROR_5022("5022", "Invalid column name", "Failed to find column in the schema");
+  ERROR_5022("5022", "Invalid column name", "Failed to find column in the schema"),
+
+  ERROR_5023(
+      "5023",
+      "Failure in Streaming Channel Offset Migration Response",
+      "Streaming Channel Offset Migration from Source to Destination Channel has no/invalid"
+          + " response, please contact Snowflake Support");
 
   // properties
 

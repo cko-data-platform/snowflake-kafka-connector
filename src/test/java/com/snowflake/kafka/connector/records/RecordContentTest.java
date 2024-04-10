@@ -107,7 +107,7 @@ public class RecordContentTest {
                         .put("map", Collections.singletonMap("field", 1))
                         .put("mapNonStringKeys", Collections.singletonMap(1, 1));
 
-        content = new SnowflakeRecordContent(schema, original);
+        content = new SnowflakeRecordContent(schema, original, false);
         assert content
                 .getData()[0]
                 .toString()
@@ -121,7 +121,7 @@ public class RecordContentTest {
         Map<String, Object> jsonMap =
                 mapper.convertValue(jsonObject, new TypeReference<Map<String, Object>>() {
                 });
-        content = new SnowflakeRecordContent(null, jsonMap);
+        content = new SnowflakeRecordContent(null, jsonMap, false);
         assert content
                 .getData()[0]
                 .toString()
@@ -129,22 +129,22 @@ public class RecordContentTest {
                         "{\"int8\":12,\"int16\":12,\"int32\":12,\"int64\":12,\"float32\":12.2,\"float64\":12.2,\"boolean\":true,\"string\":\"foo\",\"bytes\":\"Zm9v\",\"array\":[\"a\",\"b\",\"c\"],\"map\":{\"field\":1},\"mapNonStringKeys\":[[1,1]]}");
     }
 
-  @Test(expected = SnowflakeKafkaConnectorException.class)
-  public void testEmptyValueDisabledTombstone() {
-    RecordService service = new RecordService();
-    service.setBehaviorOnNullValues(SnowflakeSinkConnectorConfig.BehaviorOnNullValues.IGNORE);
+    @Test(expected = SnowflakeKafkaConnectorException.class)
+    public void testEmptyValueDisabledTombstone() {
+        RecordService service = new RecordService();
+        service.setBehaviorOnNullValues(SnowflakeSinkConnectorConfig.BehaviorOnNullValues.IGNORE);
 
         SinkRecord record =
                 new SinkRecord(topic, partition, null, null, Schema.STRING_SCHEMA, null, partition);
         service.getProcessedRecordForSnowpipe(record);
     }
 
-  @Test(expected = SnowflakeKafkaConnectorException.class)
-  public void testEmptyValueSchemaDisabledTombstone() throws IOException {
-    JsonNode data = mapper.readTree("{\"name\":123}");
-    SnowflakeRecordContent content = new SnowflakeRecordContent(data);
-    RecordService service = new RecordService();
-    service.setBehaviorOnNullValues(SnowflakeSinkConnectorConfig.BehaviorOnNullValues.IGNORE);
+    @Test(expected = SnowflakeKafkaConnectorException.class)
+    public void testEmptyValueSchemaDisabledTombstone() throws IOException {
+        JsonNode data = mapper.readTree("{\"name\":123}");
+        SnowflakeRecordContent content = new SnowflakeRecordContent(data);
+        RecordService service = new RecordService();
+        service.setBehaviorOnNullValues(SnowflakeSinkConnectorConfig.BehaviorOnNullValues.IGNORE);
 
         SinkRecord record = new SinkRecord(topic, partition, null, null, null, content, partition);
         service.getProcessedRecordForSnowpipe(record);
@@ -210,24 +210,22 @@ public class RecordContentTest {
 
     @Test(expected = SnowflakeKafkaConnectorException.class)
     public void testConvertToJsonEmptyValue() {
-        assert RecordService.convertToJson(null, null) == null;
-
         Schema schema = SchemaBuilder.int32().optional().defaultValue(123).build();
-        assert RecordService.convertToJson(schema, null).toString().equals("123");
+        assert RecordService.convertToJson(schema, null, false).toString().equals("123");
 
         schema = SchemaBuilder.int32().build();
-        RecordService.convertToJson(schema, null);
+        RecordService.convertToJson(schema, null, false);
     }
 
     @Test(expected = SnowflakeKafkaConnectorException.class)
     public void testConvertToJsonNonOptional() {
         Schema schema = SchemaBuilder.int32().build();
-        RecordService.convertToJson(schema, null);
+        RecordService.convertToJson(schema, null, false);
     }
 
     @Test(expected = SnowflakeKafkaConnectorException.class)
     public void testConvertToJsonNoSchemaType() {
-        RecordService.convertToJson(null, new SnowflakeJsonSchema());
+        RecordService.convertToJson(null, new SnowflakeJsonSchema(), false);
     }
 
     @Test
@@ -237,7 +235,7 @@ public class RecordContentTest {
         String expected = "\"" + Base64.getEncoder().encodeToString(original.getBytes()) + "\"";
         ByteBuffer buffer = ByteBuffer.wrap(original.getBytes()).asReadOnlyBuffer();
         Schema schema = SchemaBuilder.bytes().build();
-        assert RecordService.convertToJson(schema, buffer).toString().equals(expected);
+        assert RecordService.convertToJson(schema, buffer, false).toString().equals(expected);
     }
 
     @Test
@@ -254,13 +252,13 @@ public class RecordContentTest {
                 new SinkRecord(
                         topic, partition, Schema.STRING_SCHEMA, "string", sv.schema(), sv.value(), partition);
 
-    Map<String, Object> got = service.getProcessedRecordForStreamingIngest(record);
-    // each field should be dumped into string format
-    // json string should not be enclosed in additional brackets
-    // a non-double-quoted column name will be transformed into uppercase
-    assert got.get("\"NAME\"").equals("sf");
-    assert got.get("\"ANSWER\"").equals("42");
-  }
+        Map<String, Object> got = service.getProcessedRecordForStreamingIngest(record);
+        // each field should be dumped into string format
+        // json string should not be enclosed in additional brackets
+        // a non-double-quoted column name will be transformed into uppercase
+        assert got.get("\"NAME\"").equals("sf");
+        assert got.get("\"ANSWER\"").equals("42");
+    }
 
     @Test
     public void testColumnNameFormatting() throws JsonProcessingException {
@@ -276,83 +274,85 @@ public class RecordContentTest {
                 new SinkRecord(
                         topic, partition, Schema.STRING_SCHEMA, "string", sv.schema(), sv.value(), partition);
         Map<String, Object> got = service.getProcessedRecordForStreamingIngest(record);
-    assert got.containsKey("\"NaMe\"");
-    assert got.containsKey("\"ANSWER\"");
-  }
 
-  @Test
-  public void testGetProcessedRecord() throws JsonProcessingException {
-    SnowflakeJsonConverter jsonConverter = new SnowflakeJsonConverter();
-    SchemaAndValue nullSchemaAndValue = jsonConverter.toConnectData(topic, null);
-    String keyStr = "string";
-
-    // all null
-    this.testGetProcessedRecordRunner(
-        new SinkRecord(topic, partition, null, null, null, null, partition), "{}", "");
-
-    // null value
-    this.testGetProcessedRecordRunner(
-        new SinkRecord(
-            topic,
-            partition,
-            Schema.STRING_SCHEMA,
-            keyStr,
-            nullSchemaAndValue.schema(),
-            null,
-            partition),
-        "{}",
-        keyStr);
-    this.testGetProcessedRecordRunner(
-        new SinkRecord(
-            topic,
-            partition,
-            Schema.STRING_SCHEMA,
-            keyStr,
-            null,
-            nullSchemaAndValue.value(),
-            partition),
-        "{}",
-        keyStr);
-
-    // null key
-    this.testGetProcessedRecordRunner(
-        new SinkRecord(
-            topic,
-            partition,
-            Schema.STRING_SCHEMA,
-            null,
-            nullSchemaAndValue.schema(),
-            nullSchemaAndValue.value(),
-            partition),
-        "{}",
-        "");
-    try {
-      this.testGetProcessedRecordRunner(
-          new SinkRecord(
-              topic,
-              partition,
-              null,
-              keyStr,
-              nullSchemaAndValue.schema(),
-              nullSchemaAndValue.value(),
-              partition),
-          "{}",
-          keyStr);
-    } catch (SnowflakeKafkaConnectorException ex) {
-      assert ex.checkErrorCode(SnowflakeErrors.ERROR_0010);
+        assert got.containsKey("\"NaMe\"");
+        assert got.containsKey("\"ANSWER\"");
     }
-  }
 
-  private void testGetProcessedRecordRunner(
-      SinkRecord record, String expectedRecordContent, String expectedRecordMetadataKey)
-      throws JsonProcessingException {
-    RecordService service = new RecordService();
-    Map<String, Object> recordData = service.getProcessedRecordForStreamingIngest(record);
+    @Test
+    public void testGetProcessedRecord() throws JsonProcessingException {
+        SnowflakeJsonConverter jsonConverter = new SnowflakeJsonConverter();
+        SchemaAndValue nullSchemaAndValue = jsonConverter.toConnectData(topic, null);
+        String keyStr = "string";
 
-    assert recordData.size() == 2;
-    assert recordData.get("RECORD_CONTENT").equals(expectedRecordContent);
-    assert recordData.get("RECORD_METADATA").toString().contains(expectedRecordMetadataKey);
-  }
+        // all null
+        this.testGetProcessedRecordRunner(
+                new SinkRecord(topic, partition, null, null, null, null, partition), "{}", "");
+
+        // null value
+        this.testGetProcessedRecordRunner(
+                new SinkRecord(
+                        topic,
+                        partition,
+                        Schema.STRING_SCHEMA,
+                        keyStr,
+                        nullSchemaAndValue.schema(),
+                        null,
+                        partition),
+                "{}",
+                keyStr);
+        this.testGetProcessedRecordRunner(
+                new SinkRecord(
+                        topic,
+                        partition,
+                        Schema.STRING_SCHEMA,
+                        keyStr,
+                        null,
+                        nullSchemaAndValue.value(),
+                        partition),
+                "{}",
+                keyStr);
+
+        // null key
+        this.testGetProcessedRecordRunner(
+                new SinkRecord(
+                        topic,
+                        partition,
+                        Schema.STRING_SCHEMA,
+                        null,
+                        nullSchemaAndValue.schema(),
+                        nullSchemaAndValue.value(),
+                        partition),
+                "{}",
+                "");
+        try {
+            this.testGetProcessedRecordRunner(
+                    new SinkRecord(
+                            topic,
+                            partition,
+                            null,
+                            keyStr,
+                            nullSchemaAndValue.schema(),
+                            nullSchemaAndValue.value(),
+                            partition),
+                    "{}",
+                    keyStr);
+        } catch (SnowflakeKafkaConnectorException ex) {
+            assert ex.checkErrorCode(SnowflakeErrors.ERROR_0010);
+        }
+    }
+
+    private void testGetProcessedRecordRunner(
+            SinkRecord record, String expectedRecordContent, String expectedRecordMetadataKey)
+            throws JsonProcessingException {
+        RecordService service = new RecordService();
+        Map<String, Object> recordData = service.getProcessedRecordForStreamingIngest(record);
+
+        System.out.println(recordData);
+        assert recordData.size() == 2;
+        assert recordData.get("\"RECORD_CONTENT\"").equals(expectedRecordContent);
+        assert recordData.get("\"RECORD_METADATA\"").toString().contains(expectedRecordMetadataKey);
+    }
 
     @Test
     public void testSchematizationNestedStringField() throws JsonProcessingException {
@@ -376,8 +376,8 @@ public class RecordContentTest {
 
         System.out.println(got);
 
-        assert got.get(Utils.quoteNameIfNeeded("OUTER_STRUCT_NAME")).equals("sf");
-        assert got.get(Utils.quoteNameIfNeeded("OUTER_STRUCT_ANSWER")).equals("42");
+        assert got.get("\"OUTER_STRUCT_NAME\"").equals("sf");
+        assert got.get("\"OUTER_STRUCT_ANSWER\"").equals("42");
     }
 
     @Test
@@ -402,9 +402,9 @@ public class RecordContentTest {
 
         System.out.println(got);
 
-        assert got.get(Utils.quoteNameIfNeeded("NAME")).equals("sf");
-        assert got.get(Utils.quoteNameIfNeeded("ANSWER")).equals("42");
-        assert got.get(Utils.quoteNameIfNeeded("KAFKA_OFFSET")).equals("0");
+        assert got.get("\"NAME\"").equals("sf");
+        assert got.get("\"ANSWER\"").equals("42");
+        assert got.get("\"KAFKA_OFFSET\"").equals("0");
     }
 
     @Test
@@ -427,8 +427,9 @@ public class RecordContentTest {
         // json string should not be enclosed in additional brackets
         // a non-double-quoted column name will be transformed into uppercase
 
-        assert got.get(Utils.quoteNameIfNeeded("OUTER_2_STRUCT_OUTER_STRUCT_NAME")).equals("sf");
-        assert got.get(Utils.quoteNameIfNeeded("OUTER_2_STRUCT_OUTER_STRUCT_ANSWER")).equals("42");
+
+        assert got.get("\"OUTER_2_STRUCT_OUTER_STRUCT_NAME\"").equals("sf");
+        assert got.get("\"OUTER_2_STRUCT_OUTER_STRUCT_ANSWER\"").equals("42");
     }
 
     @Test
@@ -453,13 +454,13 @@ public class RecordContentTest {
         // a non-double-quoted column name will be transformed into uppercase
 
         System.out.println(got);
-        assert got.get(Utils.quoteNameIfNeeded("OUTER_STRUCT_NAME")).equals("sf");
-        assert got.get(Utils.quoteNameIfNeeded("OUTER_STRUCT_ANSWER")).equals("42");
-        assert got.get(Utils.quoteNameIfNeeded("JSON_STRING_PARTITIONKEY_S")).equals("MT942_BankStatement_2023013009063451.pgp");
+        assert got.get("\"OUTER_STRUCT_NAME\"").equals("sf");
+        assert got.get("\"OUTER_STRUCT_ANSWER\"").equals("42");
+        assert got.get("\"JSON_STRING_PARTITIONKEY_S\"").equals("MT942_BankStatement_2023013009063451.pgp");
     }
 
 
-//    Any fields include "NestColExcl" should NOT be flattened
+    //    Any fields include "NestColExcl" should NOT be flattened
     @Test
     public void testSchematizationNestedExclField() throws JsonProcessingException {
         RecordService service = new RecordService();
@@ -481,9 +482,9 @@ public class RecordContentTest {
         // json string should not be enclosed in additional brackets
         // a non-double-quoted column name will be transformed into uppercase
 
-        assert got.get(Utils.quoteNameIfNeeded("OUTER_STRUCT_NAME")).equals("sf");
-        assert got.containsKey(Utils.quoteNameIfNeeded("OUTER_STRUCT_ANSWER"));
-        assert got.containsKey(Utils.quoteNameIfNeeded("OUTER_STRUCT_EXCLME"));
+        assert got.get("\"OUTER_STRUCT_NAME\"").equals("sf");
+        assert got.containsKey("\"OUTER_STRUCT_ANSWER\"");
+        assert got.containsKey("\"OUTER_STRUCT_EXCLME\"");
     }
 
     @Test
@@ -507,8 +508,8 @@ public class RecordContentTest {
         // json string should not be enclosed in additional brackets
         // a non-double-quoted column name will be transformed into uppercase
 
-        assert got.get(Utils.quoteNameIfNeeded("OUTER_2_STRUCT_OUTER_STRUCT_NAME")).equals("sf");
-        assert got.get(Utils.quoteNameIfNeeded("OUTER_2_STRUCT_OUTER_STRUCT_ANSWER")).equals("42");
-        assert got.get(Utils.quoteNameIfNeeded("OUTER_2_STRUCT_OUTER_STRUCT_EXCLME")).equals("{\"test\":1}");
+        assert got.get("\"OUTER_2_STRUCT_OUTER_STRUCT_NAME\"").equals("sf");
+        assert got.get("\"OUTER_2_STRUCT_OUTER_STRUCT_ANSWER\"").equals("42");
+        assert got.get("\"OUTER_2_STRUCT_OUTER_STRUCT_EXCLME\"").equals("{\"test\":1}");
     }
 }
