@@ -28,6 +28,8 @@ import com.snowflake.kafka.connector.records.SnowflakeRecordContent;
 import dev.failsafe.Failsafe;
 import dev.failsafe.Fallback;
 import dev.failsafe.RetryPolicy;
+import dev.failsafe.event.ExecutionAttemptedEvent;
+import dev.failsafe.event.ExecutionCompletedEvent;
 import dev.failsafe.function.CheckedSupplier;
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectOutputStream;
@@ -620,18 +622,22 @@ public class TopicPartitionChannel {
                 })
             .handle(SFException.class)
             .onFailedAttempt(
-                event ->
-                    LOGGER.warn(
-                            "Failed Attempt to invoke the insertRows API for buffer: Buffer: {} \n LastExcep: {} \n LastRes: {}", buffer.toString(),
-                            event.getLastException().toString()))
+                    (ExecutionAttemptedEvent<Object> event) -> {
+                      LOGGER.warn(
+                              "Failed Attempt to invoke the insertRows API for buffer: Buffer: {} \n LastExcep: {} \n LastRes: {}", buffer.toString(),
+                              event.getLastException().getMessage());
+                      event.getLastException().printStackTrace(System.out);
+                    })
             .onFailure(
-                event ->
-                    LOGGER.error(
-                        String.format(
-                            "%s Failed to open Channel or fetching offsetToken for channel:%s",
-                            StreamingApiFallbackInvoker.INSERT_ROWS_FALLBACK,
-                            this.getChannelNameFormatV1()),
-                        event.getException()))
+                    (ExecutionCompletedEvent<Object> event) -> {
+                        LOGGER.error(
+                                String.format(
+                                        "%s Failed to open Channel or fetching offsetToken for channel:%s",
+                                        StreamingApiFallbackInvoker.INSERT_ROWS_FALLBACK,
+                                        this.getChannelNameFormatV1()),
+                                event.getException());
+                        event.getException().printStackTrace(System.out);
+                    })
             .build();
 
     return Failsafe.with(reopenChannelFallbackExecutorForInsertRows)
