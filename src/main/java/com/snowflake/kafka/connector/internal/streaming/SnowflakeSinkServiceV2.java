@@ -1,6 +1,7 @@
 package com.snowflake.kafka.connector.internal.streaming;
 
 import static com.snowflake.kafka.connector.SnowflakeSinkConnectorConfig.BUFFER_SIZE_BYTES_DEFAULT;
+import static com.snowflake.kafka.connector.SnowflakeSinkConnectorConfig.ENABLE_STREAMING_CLIENT_OPTIMIZATION_DEFAULT;
 import static com.snowflake.kafka.connector.SnowflakeSinkConnectorConfig.SNOWFLAKE_ROLE;
 import static com.snowflake.kafka.connector.internal.streaming.StreamingUtils.STREAMING_BUFFER_COUNT_RECORDS_DEFAULT;
 import static com.snowflake.kafka.connector.internal.streaming.StreamingUtils.STREAMING_BUFFER_FLUSH_TIME_DEFAULT_SEC;
@@ -22,8 +23,10 @@ import com.snowflake.kafka.connector.records.RecordService;
 import com.snowflake.kafka.connector.records.SnowflakeMetadataConfig;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import net.snowflake.ingest.streaming.SnowflakeStreamingIngestClient;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -101,6 +104,9 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
 
   // Cache for schema evolution
   private final Map<String, Boolean> tableName2SchemaEvolutionPermission;
+
+  // Set that keeps track of the channels that have been seen per input batch
+  private final Set<String> channelsVisitedPerBatch = new HashSet<>();
 
   public SnowflakeSinkServiceV2(
       SnowflakeConnectionService conn, Map<String, String> connectorConfig) {
@@ -274,13 +280,15 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
    *     Topic and multiple Partitions
    */
   @Override
-  public void insert(Collection<SinkRecord> records) {
+  public void insert(final Collection<SinkRecord> records) {
     // note that records can be empty but, we will still need to check for time based flush
+    channelsVisitedPerBatch.clear();
     for (SinkRecord record : records) {
-      // check if need to handle null value records
+      // check if it needs to handle null value records
       if (recordService.shouldSkipNullValue(record, behaviorOnNullValues)) {
         continue;
       }
+
       // While inserting into buffer, we will check for count threshold and buffered bytes
       // threshold.
       insert(record);
@@ -315,7 +323,8 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
     }
 
     TopicPartitionChannel channelPartition = partitionsToChannel.get(partitionChannelKey);
-    channelPartition.insertRecordToBuffer(record);
+    boolean isFirstRowPerPartitionInBatch = channelsVisitedPerBatch.add(partitionChannelKey);
+    channelPartition.insertRecordToBuffer(record, isFirstRowPerPartitionInBatch);
   }
 
   @Override
@@ -398,7 +407,27 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
   }
 
   @Override
-  public void setIsStoppedToTrue() {}
+  public void stop() {
+    final boolean isOptimizationEnabled =
+        Boolean.parseBoolean(
+            connectorConfig.getOrDefault(
+                SnowflakeSinkConnectorConfig.ENABLE_STREAMING_CLIENT_OPTIMIZATION_CONFIG,
+                Boolean.toString(ENABLE_STREAMING_CLIENT_OPTIMIZATION_DEFAULT)));
+    // when optimization is enabled single streamingIngestClient instance may be used by many
+    // SinkService instances
+    // stopping the client may cause unexpected behaviour
+    if (!isOptimizationEnabled) {
+      try {
+        StreamingClientProvider.getStreamingClientProviderInstance()
+            .closeClient(connectorConfig, this.streamingIngestClient);
+      } catch (Exception e) {
+        LOGGER.warn(
+            "Could not close streaming ingest client {}. Reason: {}",
+            streamingIngestClient.getName(),
+            e.getMessage());
+      }
+    }
+  }
 
   /* Undefined */
   @Override
@@ -536,8 +565,7 @@ public class SnowflakeSinkServiceV2 implements SnowflakeSinkService {
   /* Used for testing */
   @VisibleForTesting
   public SnowflakeStreamingIngestClient getStreamingIngestClient() {
-    return StreamingClientProvider.getStreamingClientProviderInstance()
-        .getClient(this.connectorConfig);
+    return this.streamingIngestClient;
   }
 
   /**

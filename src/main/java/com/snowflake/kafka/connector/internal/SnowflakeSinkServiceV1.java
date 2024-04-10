@@ -131,7 +131,7 @@ class SnowflakeSinkServiceV1 implements SnowflakeSinkService {
   public void insert(final Collection<SinkRecord> records) {
     // note that records can be empty
     for (SinkRecord record : records) {
-      // check if need to handle null value records
+      // check if it needs to handle null value records
       if (recordService.shouldSkipNullValue(record, behaviorOnNullValues)) {
         continue;
       }
@@ -230,7 +230,7 @@ class SnowflakeSinkServiceV1 implements SnowflakeSinkService {
   }
 
   @Override
-  public void setIsStoppedToTrue() {
+  public void stop() {
     this.isStopped = true; // release all cleaner and flusher threads
   }
 
