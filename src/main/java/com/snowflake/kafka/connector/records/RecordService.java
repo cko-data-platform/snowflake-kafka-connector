@@ -313,6 +313,8 @@ public class RecordService {
     for (JsonNode node : row.content.getData()) {
       if (enableSchematization) {
         streamingIngestRow.putAll(getMapFromJsonNodeForStreamingIngest(node));
+        streamingIngestRow.put(Utils.quoteNameIfNeeded(TABLE_COLUMN_KAFKA_TIMESTAMP), MAPPER.writeValueAsString(new java.sql.Timestamp(System.currentTimeMillis())));
+        streamingIngestRow.put(Utils.quoteNameIfNeeded(TABLE_COLUMN_OFFSET), MAPPER.writeValueAsString((record.kafkaOffset())));
       }
 
       streamingIngestRow.put(Utils.quoteNameIfNeeded(TABLE_COLUMN_CONTENT), MAPPER.writeValueAsString(node));
@@ -321,8 +323,6 @@ public class RecordService {
         streamingIngestRow.put(Utils.quoteNameIfNeeded(TABLE_COLUMN_METADATA), MAPPER.writeValueAsString(row.metadata));
       }
 
-      streamingIngestRow.put(Utils.quoteNameIfNeeded(TABLE_COLUMN_KAFKA_TIMESTAMP), MAPPER.writeValueAsString(new java.sql.Timestamp(System.currentTimeMillis())));
-      streamingIngestRow.put(Utils.quoteNameIfNeeded(TABLE_COLUMN_OFFSET), MAPPER.writeValueAsString((record.kafkaOffset())));
     }
     if (this.debugLog) {
       LOGGER.info("CAFLOG_DEBUGLOG_ROW - {} ~~~ {} ~~~ {} ~~~ {}", streamingIngestRow.toString(), record, record.kafkaOffset(), record.toString());
